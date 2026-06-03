@@ -1,4 +1,5 @@
-﻿import {
+﻿import { useState } from "react";
+import {
   BarChart3,
   ClipboardCheck,
   FileCheck2,
@@ -7,12 +8,17 @@
   UserPlus,
   UsersRound,
 } from "lucide-react";
+import { ActionSheet } from "../common/ActionSheet";
+import { TaskAssignSheet } from "./TaskAssignSheet";
+import { LocationCheckSheet } from "./LocationCheckSheet";
 
 type BossHomePanelProps = {
   onGoToReports: () => void;
   onGoToApprovals: () => void;
   onGoToProfile: () => void;
 };
+
+type ActiveSheet = "task" | "location" | null;
 
 const summaryItems = [
   {
@@ -37,6 +43,13 @@ export function BossHomePanel({
   onGoToApprovals,
   onGoToProfile,
 }: BossHomePanelProps) {
+  const [activeSheet, setActiveSheet] = useState<ActiveSheet>(null);
+  const [lastMessage, setLastMessage] = useState("");
+
+  function closeSheet() {
+    setActiveSheet(null);
+  }
+
   return (
     <div className="grid gap-4">
       <section className="overflow-hidden rounded-[2rem] bg-slate-950 p-5 text-white shadow-2xl shadow-slate-900/20 dark:bg-slate-950">
@@ -49,8 +62,8 @@ export function BossHomePanel({
         </h2>
 
         <p className="mt-2 text-sm font-bold leading-6 text-slate-300">
-          Patron paneli hazır. Bir sonraki adımda bu kartlar Firestore’daki
-          gerçek Ertan Market verileriyle beslenecek.
+          Patron paneli hazır. Görev atama ve konum yoklama panelleri arayüz
+          olarak eklendi.
         </p>
 
         <div className="mt-5 grid grid-cols-3 gap-2">
@@ -71,6 +84,12 @@ export function BossHomePanel({
         </div>
       </section>
 
+      {lastMessage ? (
+        <div className="rounded-[1.5rem] border border-cyan-400/30 bg-cyan-400/10 p-4 text-sm font-black text-[var(--missio-primary)]">
+          {lastMessage}
+        </div>
+      ) : null}
+
       <section className="rounded-[2rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] p-5 shadow-xl shadow-slate-900/5 dark:shadow-black/25">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
@@ -89,6 +108,7 @@ export function BossHomePanel({
           <button
             type="button"
             className="boss-action-card"
+            onClick={() => setActiveSheet("task")}
           >
             <PlusSquare size={23} />
             <strong>Görev Ata</strong>
@@ -98,6 +118,7 @@ export function BossHomePanel({
           <button
             type="button"
             className="boss-action-card"
+            onClick={() => setActiveSheet("location")}
           >
             <MapPin size={23} />
             <strong>Konum İste</strong>
@@ -156,10 +177,35 @@ export function BossHomePanel({
         </h3>
 
         <p className="mt-2 text-sm font-bold leading-6 text-[var(--missio-text-muted)]">
-          Görev listesi ana ekranda uzamayacak. Görev atama sistemi bağlanınca
-          detaylar eski Missio’daki gibi ayrı panel içinde açılacak.
+          Görev listesi ana ekranda uzamayacak. Detaylar panel içinde açılacak.
         </p>
       </section>
+
+      <ActionSheet
+        title="Görev Ata"
+        isOpen={activeSheet === "task"}
+        onClose={closeSheet}
+      >
+        <TaskAssignSheet
+          onCreated={(message) => {
+            setLastMessage(message);
+            closeSheet();
+          }}
+        />
+      </ActionSheet>
+
+      <ActionSheet
+        title="Konum İste"
+        isOpen={activeSheet === "location"}
+        onClose={closeSheet}
+      >
+        <LocationCheckSheet
+          onRequested={(message) => {
+            setLastMessage(message);
+            closeSheet();
+          }}
+        />
+      </ActionSheet>
     </div>
   );
 }
