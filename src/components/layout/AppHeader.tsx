@@ -10,7 +10,7 @@ type AppHeaderProps = {
   onLogout: () => void;
 };
 
-function MissioMiniLogo() {
+export function MissioMiniLogo() {
   return (
     <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-cyan-300/30 bg-cyan-400/10 shadow-xl shadow-cyan-500/10">
       <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-cyan-300/30 via-blue-500/10 to-transparent" />

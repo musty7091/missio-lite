@@ -11,6 +11,8 @@ import {
 import { ActionSheet } from "../common/ActionSheet";
 import { TaskAssignSheet } from "./TaskAssignSheet";
 import { LocationCheckSheet } from "./LocationCheckSheet";
+import { UserAddSheet } from "./UserAddSheet";
+import { StaffListSheet } from "./StaffListSheet";
 
 type BossHomePanelProps = {
   onGoToReports: () => void;
@@ -18,7 +20,7 @@ type BossHomePanelProps = {
   onGoToProfile: () => void;
 };
 
-type ActiveSheet = "task" | "location" | null;
+type ActiveSheet = "task" | "location" | "user" | "staff" | null;
 
 const summaryItems = [
   {
@@ -46,8 +48,15 @@ export function BossHomePanel({
   const [activeSheet, setActiveSheet] = useState<ActiveSheet>(null);
   const [lastMessage, setLastMessage] = useState("");
 
+  void onGoToProfile;
+
   function closeSheet() {
     setActiveSheet(null);
+  }
+
+  function showMessage(message: string) {
+    setLastMessage(message);
+    closeSheet();
   }
 
   return (
@@ -62,8 +71,7 @@ export function BossHomePanel({
         </h2>
 
         <p className="mt-2 text-sm font-bold leading-6 text-slate-300">
-          Patron paneli hazır. Görev atama ve konum yoklama panelleri arayüz
-          olarak eklendi.
+          Patron paneli hazır. Görev atama, konum yoklama, kullanıcı ekleme ve personel listesi panelleri arayüz olarak eklendi.
         </p>
 
         <div className="mt-5 grid grid-cols-3 gap-2">
@@ -128,7 +136,7 @@ export function BossHomePanel({
           <button
             type="button"
             className="boss-action-card"
-            onClick={onGoToProfile}
+            onClick={() => setActiveSheet("user")}
           >
             <UserPlus size={23} />
             <strong>Kullanıcı Ekle</strong>
@@ -158,7 +166,7 @@ export function BossHomePanel({
           <button
             type="button"
             className="boss-action-card"
-            onClick={onGoToProfile}
+            onClick={() => setActiveSheet("staff")}
           >
             <UsersRound size={23} />
             <strong>Personel</strong>
@@ -186,12 +194,7 @@ export function BossHomePanel({
         isOpen={activeSheet === "task"}
         onClose={closeSheet}
       >
-        <TaskAssignSheet
-          onCreated={(message) => {
-            setLastMessage(message);
-            closeSheet();
-          }}
-        />
+        <TaskAssignSheet onCreated={showMessage} />
       </ActionSheet>
 
       <ActionSheet
@@ -199,12 +202,23 @@ export function BossHomePanel({
         isOpen={activeSheet === "location"}
         onClose={closeSheet}
       >
-        <LocationCheckSheet
-          onRequested={(message) => {
-            setLastMessage(message);
-            closeSheet();
-          }}
-        />
+        <LocationCheckSheet onRequested={showMessage} />
+      </ActionSheet>
+
+      <ActionSheet
+        title="Kullanıcı Ekle"
+        isOpen={activeSheet === "user"}
+        onClose={closeSheet}
+      >
+        <UserAddSheet onCreated={showMessage} />
+      </ActionSheet>
+
+      <ActionSheet
+        title="Personel"
+        isOpen={activeSheet === "staff"}
+        onClose={closeSheet}
+      >
+        <StaffListSheet />
       </ActionSheet>
     </div>
   );

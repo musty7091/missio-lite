@@ -1,9 +1,22 @@
-﻿import { useEffect, useState } from "react";
+﻿import { useEffect, useState, type ReactNode } from "react";
 import "./App.css";
 import { auth } from "./lib/firebase";
-import { AppHeader, type ThemeMode } from "./components/layout/AppHeader";
+import {
+  AppHeader,
+  MissioMiniLogo,
+  type ThemeMode,
+} from "./components/layout/AppHeader";
 import { BottomNavigation, type AppTab } from "./components/layout/BottomNavigation";
 import { BossHomePanel } from "./components/boss/BossHomePanel";
+import { ActionSheet } from "./components/common/ActionSheet";
+import { ForgotPasswordSheet } from "./components/auth/ForgotPasswordSheet";
+import {
+  Building2,
+  KeyRound,
+  LockKeyhole,
+  ShieldCheck,
+  UserRound,
+} from "lucide-react";
 import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
@@ -12,6 +25,7 @@ import {
 } from "firebase/auth";
 
 const THEME_STORAGE_KEY = "missio-lite-theme";
+const DEFAULT_BUSINESS_CODE = "ertanmarket";
 
 function getInitialTheme(): ThemeMode {
   const savedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
@@ -33,112 +47,220 @@ function applyTheme(theme: ThemeMode) {
   window.localStorage.setItem(THEME_STORAGE_KEY, theme);
 }
 
-function AppLogo() {
+function resolveLoginEmail(businessCode: string, username: string) {
+  const normalizedBusinessCode = businessCode.trim().toLowerCase();
+  const normalizedUsername = username.trim();
+
+  if (normalizedBusinessCode !== DEFAULT_BUSINESS_CODE) {
+    throw new Error("INVALID_BUSINESS_CODE");
+  }
+
+  if (normalizedUsername.includes("@")) {
+    return normalizedUsername;
+  }
+
+  const usernameMap: Record<string, string> = {
+    mustafa: "m.mkaradeniz@icloud.com",
+    patron: "m.mkaradeniz@icloud.com",
+    owner: "m.mkaradeniz@icloud.com",
+    "m.mkaradeniz": "m.mkaradeniz@icloud.com",
+  };
+
+  const mappedEmail = usernameMap[normalizedUsername.toLowerCase()];
+
+  if (!mappedEmail) {
+    throw new Error("UNKNOWN_USERNAME");
+  }
+
+  return mappedEmail;
+}
+
+function LoginField({
+  label,
+  icon,
+  type,
+  value,
+  onChange,
+  onEnter,
+}: {
+  label: string;
+  icon: ReactNode;
+  type: string;
+  value: string;
+  onChange: (value: string) => void;
+  onEnter?: () => void;
+}) {
   return (
-    <div className="brand-icon" aria-hidden="true">
-      M
-    </div>
+    <label className="grid gap-2">
+      <span className="text-sm font-black text-[var(--missio-text-main)]">
+        {label}
+      </span>
+
+      <div className="flex h-14 items-center gap-3 rounded-2xl border border-[var(--missio-border)] bg-[var(--missio-page-bg)] px-4 focus-within:border-[var(--missio-primary)] focus-within:ring-4 focus-within:ring-cyan-500/10">
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-cyan-500/10 text-[var(--missio-primary)]">
+          {icon}
+        </span>
+
+        <input
+          type={type}
+          value={value}
+          autoComplete="off"
+          onChange={(event) => onChange(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && onEnter) {
+              onEnter();
+            }
+          }}
+          className="h-full min-w-0 flex-1 bg-transparent text-sm font-black text-[var(--missio-text-main)] outline-none"
+        />
+      </div>
+    </label>
   );
 }
 
 function LoginScreen() {
-  const [email, setEmail] = useState("m.mkaradeniz@icloud.com");
+  const [businessCode, setBusinessCode] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState("");
+  const [forgotPasswordOpen, setForgotPasswordOpen] = useState(false);
 
   async function handleLogin() {
     setMessage("");
 
-    if (!email.trim() || !password.trim()) {
-      setMessage("Lütfen e-posta ve şifre gir.");
+    if (!businessCode.trim() || !username.trim() || !password.trim()) {
+      setMessage("Lütfen işletme kodu, kullanıcı adı ve şifre gir.");
       return;
     }
 
     try {
       setIsSubmitting(true);
-      await signInWithEmailAndPassword(auth, email.trim(), password);
+
+      const loginEmail = resolveLoginEmail(businessCode, username);
+
+      await signInWithEmailAndPassword(auth, loginEmail, password);
       setPassword("");
     } catch (error) {
       console.error(error);
-      setMessage("Giriş başarısız. E-posta veya şifreyi kontrol et.");
+
+      if (error instanceof Error && error.message === "INVALID_BUSINESS_CODE") {
+        setMessage("İşletme kodu bulunamadı.");
+      } else if (error instanceof Error && error.message === "UNKNOWN_USERNAME") {
+        setMessage("Kullanıcı adı bulunamadı.");
+      } else {
+        setMessage("Giriş başarısız. Bilgileri kontrol et.");
+      }
     } finally {
       setIsSubmitting(false);
     }
   }
 
+  function handleForgotPasswordMessage(requestMessage: string) {
+    setMessage(requestMessage);
+    setForgotPasswordOpen(false);
+  }
+
   return (
-    <main className="page">
-      <section className="login-card">
-        <div className="brand-area">
-          <AppLogo />
-          <div>
-            <h1>Missio Lite</h1>
-            <p>Görev, konum ve saha operasyon takibi</p>
+    <main className="min-h-screen bg-[var(--missio-page-bg)] px-4 py-6 text-[var(--missio-text-main)]">
+      <section className="mx-auto max-w-[520px] overflow-hidden rounded-[2.2rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] shadow-2xl shadow-slate-950/20">
+        <div className="relative overflow-hidden bg-slate-950 px-6 pb-7 pt-7 text-white">
+          <div className="absolute -right-16 -top-20 h-48 w-48 rounded-full bg-cyan-400/20 blur-3xl" />
+          <div className="absolute -bottom-24 -left-20 h-56 w-56 rounded-full bg-blue-500/20 blur-3xl" />
+
+          <div className="relative flex items-center gap-4">
+            <MissioMiniLogo />
+
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-3xl font-black tracking-tight">Missio</h1>
+                <span className="rounded-full bg-cyan-400/15 px-2.5 py-1 text-[0.65rem] font-black text-cyan-200 ring-1 ring-cyan-300/20">
+                  LITE
+                </span>
+              </div>
+
+              <p className="mt-2 text-sm font-bold leading-5 text-slate-300">
+                Görev, konum ve saha operasyon takibi
+              </p>
+            </div>
+          </div>
+
+          <div className="relative mt-6 rounded-[1.6rem] border border-cyan-300/20 bg-white/5 p-4">
+            <div className="flex items-start gap-3">
+              <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-cyan-400/15 text-cyan-200">
+                <ShieldCheck size={22} />
+              </div>
+
+              <div>
+                <h2 className="text-base font-black text-white">Missio Login</h2>
+                <p className="mt-1 text-xs font-bold leading-5 text-slate-300">
+                  İşletme kodu, kullanıcı adı ve şifre ile güvenli giriş yap.
+                </p>
+              </div>
+            </div>
           </div>
         </div>
 
-        <div className="info-box">
-          <strong>Düşük maliyetli işletme paneli</strong>
-          <span>
-            Ertan Market için Firebase tabanlı görev ve operasyon paneli.
-          </span>
-        </div>
+        <div className="grid gap-4 p-6">
+          <LoginField
+            label="İşletme Kodu"
+            type="text"
+            value={businessCode}
+            onChange={setBusinessCode}
+            icon={<Building2 size={20} />}
+          />
 
-        <form className="login-form">
-          <label>
-            E-posta
-            <input
-              type="email"
-              placeholder="ornek@firma.com"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-            />
-          </label>
+          <LoginField
+            label="Kullanıcı Adı"
+            type="text"
+            value={username}
+            onChange={setUsername}
+            icon={<UserRound size={20} />}
+          />
 
-          <label>
-            Şifre
-            <input
-              type="password"
-              placeholder="••••••••"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  void handleLogin();
-                }
-              }}
-            />
-          </label>
+          <LoginField
+            label="Şifre"
+            type="password"
+            value={password}
+            onChange={setPassword}
+            onEnter={() => void handleLogin()}
+            icon={<LockKeyhole size={20} />}
+          />
 
-          {message ? <div className="error-message">{message}</div> : null}
+          {message ? (
+            <div className="rounded-2xl border border-red-400/30 bg-red-400/10 p-4 text-sm font-black text-red-500">
+              {message}
+            </div>
+          ) : null}
 
-          <button type="button" onClick={handleLogin} disabled={isSubmitting}>
+          <button
+            type="button"
+            onClick={handleLogin}
+            disabled={isSubmitting}
+            className="flex min-h-14 items-center justify-center gap-2 rounded-[1.4rem] bg-[var(--missio-primary)] px-4 py-3 text-sm font-black text-white shadow-lg shadow-cyan-500/20 transition active:scale-95 disabled:opacity-70"
+          >
+            <KeyRound size={18} />
             {isSubmitting ? "Giriş yapılıyor..." : "Giriş Yap"}
           </button>
-        </form>
 
-        <p className="footer-note">Missio Lite v1 Firebase Auth bağlantısı</p>
+          <button
+            type="button"
+            onClick={() => setForgotPasswordOpen(true)}
+            className="min-h-13 rounded-[1.4rem] border border-[var(--missio-border)] bg-[var(--missio-page-bg)] px-4 py-3 text-sm font-black text-[var(--missio-primary)] transition active:scale-95"
+          >
+            Şifremi Unuttum
+          </button>
+        </div>
       </section>
-    </main>
-  );
-}
 
-function TasksTab({
-  onGoToReports,
-  onGoToApprovals,
-  onGoToProfile,
-}: {
-  onGoToReports: () => void;
-  onGoToApprovals: () => void;
-  onGoToProfile: () => void;
-}) {
-  return (
-    <BossHomePanel
-      onGoToReports={onGoToReports}
-      onGoToApprovals={onGoToApprovals}
-      onGoToProfile={onGoToProfile}
-    />
+      <ActionSheet
+        title="Şifremi Unuttum"
+        isOpen={forgotPasswordOpen}
+        onClose={() => setForgotPasswordOpen(false)}
+      >
+        <ForgotPasswordSheet onRequested={handleForgotPasswordMessage} />
+      </ActionSheet>
+    </main>
   );
 }
 
@@ -168,7 +290,7 @@ function NotificationsTab() {
         Bekleyen Kontroller
       </h2>
       <p className="mt-2 text-sm font-bold leading-6 text-[var(--missio-text-muted)]">
-        Görev ve konum onayları burada görünecek.
+        Görev, konum ve şifre talepleri burada görünecek.
       </p>
     </section>
   );
@@ -246,12 +368,13 @@ function AuthenticatedPanel({
 
         <div className="grid gap-4">
           {activeTab === "tasks" ? (
-            <TasksTab
+            <BossHomePanel
               onGoToReports={() => setActiveTab("reports")}
               onGoToApprovals={() => setActiveTab("notifications")}
               onGoToProfile={() => setActiveTab("profile")}
             />
           ) : null}
+
           {activeTab === "reports" ? <ReportsTab /> : null}
           {activeTab === "notifications" ? <NotificationsTab /> : null}
           {activeTab === "profile" ? <ProfileTab currentUser={currentUser} /> : null}
@@ -296,13 +419,17 @@ function App() {
 
   if (isCheckingAuth) {
     return (
-      <main className="page">
-        <section className="login-card">
-          <div className="brand-area">
-            <AppLogo />
+      <main className="min-h-screen bg-[var(--missio-page-bg)] px-4 py-6 text-[var(--missio-text-main)]">
+        <section className="mx-auto max-w-[520px] rounded-[2rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] p-6">
+          <div className="flex items-center gap-4">
+            <MissioMiniLogo />
             <div>
-              <h1>Missio Lite</h1>
-              <p>Oturum kontrol ediliyor...</p>
+              <h1 className="text-2xl font-black tracking-tight text-[var(--missio-text-main)]">
+                Missio
+              </h1>
+              <p className="mt-1 text-sm font-bold text-[var(--missio-text-muted)]">
+                Oturum kontrol ediliyor...
+              </p>
             </div>
           </div>
         </section>
@@ -325,5 +452,3 @@ function App() {
 }
 
 export default App;
-
-
