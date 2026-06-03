@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { User } from "firebase/auth";
 import {
-  BarChart3,
+  ArrowLeft,
   Building2,
   CalendarClock,
   CheckCircle2,
@@ -30,28 +30,14 @@ type SuperAdminPanelProps = {
   currentUser: User;
 };
 
-type SuperAdminTab =
-  | "overview"
-  | "businesses"
+type SuperAdminView =
+  | "home"
   | "create"
+  | "businesses"
   | "users"
   | "passwords"
   | "subscriptions"
   | "system";
-
-const tabs: Array<{
-  id: SuperAdminTab;
-  label: string;
-  icon: LucideIcon;
-}> = [
-  { id: "overview", label: "Genel", icon: BarChart3 },
-  { id: "businesses", label: "İşletmeler", icon: Building2 },
-  { id: "create", label: "Yeni İşletme", icon: Plus },
-  { id: "users", label: "Kullanıcılar", icon: UsersRound },
-  { id: "passwords", label: "Şifre", icon: KeyRound },
-  { id: "subscriptions", label: "Abonelik", icon: CreditCard },
-  { id: "system", label: "Sistem", icon: Settings },
-];
 
 function todayIsoDate() {
   return new Date().toISOString().slice(0, 10);
@@ -88,25 +74,58 @@ function MetricCard({
   icon: LucideIcon;
 }) {
   return (
-    <div className="rounded-[1.6rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] p-4 shadow-sm">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <div className="grid h-11 w-11 place-items-center rounded-2xl bg-cyan-500/10 text-[var(--missio-primary)]">
-          <Icon size={22} />
+    <div
+      aria-label={`${title}. ${note}`}
+      className="rounded-[1.2rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] p-3 shadow-sm"
+    >
+      <div className="flex items-center gap-2">
+        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-cyan-500/10 text-[var(--missio-primary)]">
+          <Icon size={18} />
+        </div>
+
+        <div className="min-w-0">
+          <p className="text-xl font-black leading-none text-[var(--missio-text-main)]">
+            {value}
+          </p>
+
+          <h4 className="mt-1 text-[0.72rem] font-black leading-4 text-[var(--missio-text-main)]">
+            {title}
+          </h4>
         </div>
       </div>
-
-      <p className="text-2xl font-black text-[var(--missio-text-main)]">
-        {value}
-      </p>
-
-      <h4 className="mt-1 text-sm font-black text-[var(--missio-text-main)]">
-        {title}
-      </h4>
-
-      <p className="mt-1 text-xs font-bold leading-5 text-[var(--missio-text-muted)]">
-        {note}
-      </p>
     </div>
+  );
+}
+
+function QuickActionCard({
+  title,
+  description,
+  icon: Icon,
+  onClick,
+}: {
+  title: string;
+  description: string;
+  icon: LucideIcon;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="rounded-[1.7rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] p-4 text-left shadow-sm transition active:scale-[0.98]"
+    >
+      <div className="mb-4 grid h-12 w-12 place-items-center rounded-2xl bg-cyan-500/10 text-[var(--missio-primary)]">
+        <Icon size={24} />
+      </div>
+
+      <h3 className="text-base font-black text-[var(--missio-text-main)]">
+        {title}
+      </h3>
+
+      <p className="mt-2 text-xs font-bold leading-5 text-[var(--missio-text-muted)]">
+        {description}
+      </p>
+    </button>
   );
 }
 
@@ -132,6 +151,19 @@ function SectionTitle({
 
       <Icon className="text-[var(--missio-primary)]" size={24} />
     </div>
+  );
+}
+
+function BackButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="mb-4 flex w-fit items-center gap-2 rounded-2xl border border-[var(--missio-border)] bg-[var(--missio-card-bg)] px-4 py-3 text-xs font-black text-[var(--missio-text-main)] active:scale-95"
+    >
+      <ArrowLeft size={17} />
+      Ana Panele Dön
+    </button>
   );
 }
 
@@ -180,7 +212,7 @@ function BusinessCard({ business }: { business: BusinessListItem }) {
           </p>
 
           <p className="mt-1 truncate text-xs font-bold text-[var(--missio-text-muted)]">
-            Patron: {business.ownerEmail || "Henüz atanmadı"}
+            Patron: {business.ownerName || business.ownerEmail || "Henüz atanmadı"}
           </p>
         </div>
 
@@ -236,10 +268,19 @@ function BusinessCard({ business }: { business: BusinessListItem }) {
 }
 
 export function SuperAdminPanel({ currentUser }: SuperAdminPanelProps) {
-  const [activeTab, setActiveTab] = useState<SuperAdminTab>("overview");
+  const [activeView, setActiveView] = useState<SuperAdminView>("home");
+
   const [businessCode, setBusinessCode] = useState("");
   const [businessName, setBusinessName] = useState("");
+  const [businessPhone, setBusinessPhone] = useState("");
+  const [businessAddress, setBusinessAddress] = useState("");
+
+  const [ownerDisplayName, setOwnerDisplayName] = useState("");
+  const [ownerUsername, setOwnerUsername] = useState("");
   const [ownerEmail, setOwnerEmail] = useState("");
+  const [ownerPhone, setOwnerPhone] = useState("");
+  const [temporaryPassword, setTemporaryPassword] = useState("");
+
   const [plan, setPlan] = useState("lite");
   const [subscriptionStatus, setSubscriptionStatus] = useState("trial");
   const [subscriptionStartDate, setSubscriptionStartDate] = useState(todayIsoDate());
@@ -306,7 +347,13 @@ export function SuperAdminPanel({ currentUser }: SuperAdminPanelProps) {
       const createdBusiness = await createBusinessFromSuperAdmin({
         businessCode,
         businessName,
+        businessPhone,
+        businessAddress,
+        ownerDisplayName,
+        ownerUsername,
         ownerEmail,
+        ownerPhone,
+        temporaryPassword,
         plan,
         subscriptionStatus,
         subscriptionStartDate,
@@ -326,14 +373,21 @@ export function SuperAdminPanel({ currentUser }: SuperAdminPanelProps) {
 
       setBusinessCode("");
       setBusinessName("");
+      setBusinessPhone("");
+      setBusinessAddress("");
+      setOwnerDisplayName("");
+      setOwnerUsername("");
       setOwnerEmail("");
+      setOwnerPhone("");
+      setTemporaryPassword("");
       setPlan("lite");
       setSubscriptionStatus("trial");
       setSubscriptionStartDate(todayIsoDate());
       setSubscriptionEndDate(plusDaysIsoDate(14));
       setMaxUsers("10");
-      setMessage("İşletme başarıyla oluşturuldu.");
-      setActiveTab("businesses");
+
+      setMessage("İşletme ve ilk patron kullanıcısı başarıyla oluşturuldu.");
+      setActiveView("businesses");
     } catch (error) {
       console.error(error);
       setMessage(
@@ -361,55 +415,7 @@ export function SuperAdminPanel({ currentUser }: SuperAdminPanelProps) {
           İşletme, kullanıcı, şifre talebi ve abonelik yönetimi bu merkezden yapılır.
         </p>
 
-        <div className="mt-5 grid grid-cols-3 gap-2">
-          <div className="rounded-2xl bg-white/10 p-3 ring-1 ring-white/10">
-            <p className="text-2xl font-black">{stats.total}</p>
-            <span className="mt-1 block text-[0.7rem] font-black text-slate-200">
-              İşletme
-            </span>
-          </div>
-
-          <div className="rounded-2xl bg-white/10 p-3 ring-1 ring-white/10">
-            <p className="text-2xl font-black">{stats.trial}</p>
-            <span className="mt-1 block text-[0.7rem] font-black text-slate-200">
-              Deneme
-            </span>
-          </div>
-
-          <div className="rounded-2xl bg-white/10 p-3 ring-1 ring-white/10">
-            <p className="text-2xl font-black">{stats.passwordRequests}</p>
-            <span className="mt-1 block text-[0.7rem] font-black text-slate-200">
-              Şifre
-            </span>
-          </div>
-        </div>
       </section>
-
-      <nav className="overflow-x-auto rounded-[1.7rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] p-2">
-        <div className="flex min-w-max gap-2">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            const selected = activeTab === tab.id;
-
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setActiveTab(tab.id)}
-                className={[
-                  "flex min-h-11 items-center gap-2 rounded-2xl px-3 text-xs font-black transition active:scale-95",
-                  selected
-                    ? "bg-[var(--missio-primary)] text-white"
-                    : "bg-[var(--missio-page-bg)] text-[var(--missio-text-muted)]",
-                ].join(" ")}
-              >
-                <Icon size={16} />
-                {tab.label}
-              </button>
-            );
-          })}
-        </div>
-      </nav>
 
       {message ? (
         <div className="rounded-[1.5rem] border border-cyan-400/30 bg-cyan-400/10 p-4 text-sm font-black text-[var(--missio-primary)]">
@@ -417,26 +423,26 @@ export function SuperAdminPanel({ currentUser }: SuperAdminPanelProps) {
         </div>
       ) : null}
 
-      {activeTab === "overview" ? (
+      {activeView === "home" ? (
         <div className="grid gap-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-4 gap-2">
             <MetricCard
               title="Toplam İşletme"
               value={stats.total}
-              note="Sistemdeki tüm işletmeler"
+              note="Sistemde kayıtlı işletmeler"
               icon={Building2}
-            />
-            <MetricCard
-              title="Aktif İşletme"
-              value={stats.active}
-              note="Kullanımı açık olanlar"
-              icon={CheckCircle2}
             />
             <MetricCard
               title="Pasif İşletme"
               value={stats.passive}
               note="Askıya alınanlar"
               icon={XCircle}
+            />
+            <MetricCard
+              title="Deneme"
+              value={stats.trial}
+              note="Demo sürecindeki işletmeler"
+              icon={CalendarClock}
             />
             <MetricCard
               title="Pro Plan"
@@ -448,12 +454,79 @@ export function SuperAdminPanel({ currentUser }: SuperAdminPanelProps) {
 
           <section className="rounded-[2rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] p-5">
             <SectionTitle
-              eyebrow="Son İşletmeler"
-              title="Kısa Liste"
-              icon={Store}
+              eyebrow="Hızlı İşlemler"
+              title="Yönetim Merkezi"
+              icon={ShieldCheck}
             />
 
-            {businesses.length === 0 ? (
+            <div className="grid grid-cols-2 gap-3">
+              <QuickActionCard
+                title="Yeni İşletme"
+                description="Müşteri için işletme ve ilk patron hesabı oluştur."
+                icon={Plus}
+                onClick={() => setActiveView("create")}
+              />
+
+              <QuickActionCard
+                title="İşletmeleri Yönet"
+                description="Tüm işletmeleri listele, plan ve durumlarını takip et."
+                icon={Building2}
+                onClick={() => setActiveView("businesses")}
+              />
+
+              <QuickActionCard
+                title="Kullanıcı Yönetimi"
+                description="Patron, yönetici ve personel kullanıcılarını yönet."
+                icon={UsersRound}
+                onClick={() => setActiveView("users")}
+              />
+
+              <QuickActionCard
+                title="Şifre Talepleri"
+                description="Şifremi unuttum taleplerini kontrol et."
+                icon={KeyRound}
+                onClick={() => setActiveView("passwords")}
+              />
+
+              <QuickActionCard
+                title="Abonelikler"
+                description="Demo, Lite ve Pro plan sürelerini yönet."
+                icon={CreditCard}
+                onClick={() => setActiveView("subscriptions")}
+              />
+
+              <QuickActionCard
+                title="Sistem"
+                description="Firebase, bağlantı ve sistem durumunu kontrol et."
+                icon={Settings}
+                onClick={() => setActiveView("system")}
+              />
+            </div>
+          </section>
+
+          <section className="rounded-[2rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] p-5">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <SectionTitle
+                eyebrow="Son İşletmeler"
+                title="Kısa Liste"
+                icon={Store}
+              />
+
+              <button
+                type="button"
+                onClick={() => void loadBusinesses()}
+                className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl border border-[var(--missio-border)] bg-[var(--missio-page-bg)] text-[var(--missio-text-main)] active:scale-95"
+              >
+                <RefreshCcw size={18} />
+              </button>
+            </div>
+
+            {isLoading ? (
+              <div className="flex items-center gap-3 rounded-[1.4rem] bg-[var(--missio-page-bg)] p-4 text-sm font-black text-[var(--missio-text-muted)]">
+                <Loader2 size={18} className="animate-spin text-[var(--missio-primary)]" />
+                İşletmeler yükleniyor...
+              </div>
+            ) : businesses.length === 0 ? (
               <p className="rounded-[1.4rem] bg-[var(--missio-page-bg)] p-4 text-sm font-black text-[var(--missio-text-muted)]">
                 Henüz işletme yok.
               </p>
@@ -468,236 +541,333 @@ export function SuperAdminPanel({ currentUser }: SuperAdminPanelProps) {
         </div>
       ) : null}
 
-      {activeTab === "businesses" ? (
-        <section className="rounded-[2rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] p-5">
-          <div className="mb-4 flex items-center justify-between gap-3">
+      {activeView === "businesses" ? (
+        <section>
+          <BackButton onClick={() => setActiveView("home")} />
+
+          <div className="rounded-[2rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] p-5">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <SectionTitle
+                eyebrow="İşletmeler"
+                title="Kayıtlı İşletmeler"
+                icon={Building2}
+              />
+
+              <button
+                type="button"
+                onClick={() => void loadBusinesses()}
+                className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl border border-[var(--missio-border)] bg-[var(--missio-page-bg)] text-[var(--missio-text-main)] active:scale-95"
+              >
+                <RefreshCcw size={18} />
+              </button>
+            </div>
+
+            {isLoading ? (
+              <div className="flex items-center gap-3 rounded-[1.4rem] bg-[var(--missio-page-bg)] p-4 text-sm font-black text-[var(--missio-text-muted)]">
+                <Loader2 size={18} className="animate-spin text-[var(--missio-primary)]" />
+                İşletmeler yükleniyor...
+              </div>
+            ) : businesses.length === 0 ? (
+              <div className="rounded-[1.4rem] bg-[var(--missio-page-bg)] p-4 text-sm font-black text-[var(--missio-text-muted)]">
+                Henüz işletme yok.
+              </div>
+            ) : (
+              <div className="grid gap-3">
+                {businesses.map((business) => (
+                  <BusinessCard key={business.businessId} business={business} />
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+      ) : null}
+
+      {activeView === "create" ? (
+        <section>
+          <BackButton onClick={() => setActiveView("home")} />
+
+          <div className="rounded-[2rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] p-5">
             <SectionTitle
-              eyebrow="İşletmeler"
-              title="Kayıtlı İşletmeler"
-              icon={Building2}
+              eyebrow="Yeni İşletme"
+              title="İşletme ve İlk Patron Oluştur"
+              icon={Plus}
             />
 
-            <button
-              type="button"
-              onClick={() => void loadBusinesses()}
-              className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl border border-[var(--missio-border)] bg-[var(--missio-page-bg)] text-[var(--missio-text-main)] active:scale-95"
-            >
-              <RefreshCcw size={18} />
-            </button>
-          </div>
-
-          {isLoading ? (
-            <div className="flex items-center gap-3 rounded-[1.4rem] bg-[var(--missio-page-bg)] p-4 text-sm font-black text-[var(--missio-text-muted)]">
-              <Loader2 size={18} className="animate-spin text-[var(--missio-primary)]" />
-              İşletmeler yükleniyor...
-            </div>
-          ) : businesses.length === 0 ? (
-            <div className="rounded-[1.4rem] bg-[var(--missio-page-bg)] p-4 text-sm font-black text-[var(--missio-text-muted)]">
-              Henüz işletme yok.
-            </div>
-          ) : (
             <div className="grid gap-3">
-              {businesses.map((business) => (
-                <BusinessCard key={business.businessId} business={business} />
-              ))}
-            </div>
-          )}
-        </section>
-      ) : null}
-
-      {activeTab === "create" ? (
-        <section className="rounded-[2rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] p-5">
-          <SectionTitle
-            eyebrow="Yeni İşletme"
-            title="İşletme ve Abonelik Oluştur"
-            icon={Plus}
-          />
-
-          <div className="grid gap-3">
-            <TextInput
-              label="İşletme Kodu"
-              icon={Store}
-              value={businessCode}
-              onChange={setBusinessCode}
-            />
-
-            <TextInput
-              label="İşletme Adı"
-              icon={Building2}
-              value={businessName}
-              onChange={setBusinessName}
-            />
-
-            <TextInput
-              label="Patron E-posta"
-              icon={UserRound}
-              value={ownerEmail}
-              type="email"
-              onChange={setOwnerEmail}
-            />
-
-            <div className="grid gap-2">
-              <span className="text-sm font-black text-[var(--missio-text-main)]">
-                Plan
-              </span>
-
-              <div className="grid grid-cols-3 gap-2">
-                {["demo", "lite", "pro"].map((item) => (
-                  <button
-                    key={item}
-                    type="button"
-                    onClick={() => setPlan(item)}
-                    className={[
-                      "min-h-11 rounded-2xl border px-3 text-xs font-black active:scale-95",
-                      plan === item
-                        ? "border-[var(--missio-primary)] bg-[var(--missio-primary)] text-white"
-                        : "border-[var(--missio-border)] bg-[var(--missio-page-bg)] text-[var(--missio-text-main)]",
-                    ].join(" ")}
-                  >
-                    {getPlanLabel(item)}
-                  </button>
-                ))}
+              <div className="rounded-[1.4rem] border border-cyan-400/25 bg-cyan-400/10 p-4">
+                <h4 className="text-sm font-black text-[var(--missio-text-main)]">
+                  İşletme Bilgileri
+                </h4>
+                <p className="mt-1 text-xs font-bold leading-5 text-[var(--missio-text-muted)]">
+                  Müşterinin sisteme girişte kullanacağı işletme kodu burada belirlenir.
+                </p>
               </div>
-            </div>
 
-            <div className="grid gap-2">
-              <span className="text-sm font-black text-[var(--missio-text-main)]">
-                Abonelik Durumu
-              </span>
+              <TextInput
+                label="İşletme Kodu"
+                icon={Store}
+                value={businessCode}
+                onChange={setBusinessCode}
+              />
 
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  ["trial", "Deneme"],
-                  ["active", "Aktif"],
-                  ["suspended", "Askıda"],
-                  ["cancelled", "İptal"],
-                ].map(([value, label]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => setSubscriptionStatus(value)}
-                    className={[
-                      "min-h-11 rounded-2xl border px-3 text-xs font-black active:scale-95",
-                      subscriptionStatus === value
-                        ? "border-[var(--missio-primary)] bg-[var(--missio-primary)] text-white"
-                        : "border-[var(--missio-border)] bg-[var(--missio-page-bg)] text-[var(--missio-text-main)]",
-                    ].join(" ")}
-                  >
-                    {label}
-                  </button>
-                ))}
+              <TextInput
+                label="İşletme Adı"
+                icon={Building2}
+                value={businessName}
+                onChange={setBusinessName}
+              />
+
+              <TextInput
+                label="İşletme Telefonu"
+                icon={Building2}
+                value={businessPhone}
+                onChange={setBusinessPhone}
+              />
+
+              <TextInput
+                label="İşletme Adresi"
+                icon={Building2}
+                value={businessAddress}
+                onChange={setBusinessAddress}
+              />
+
+              <div className="rounded-[1.4rem] border border-cyan-400/25 bg-cyan-400/10 p-4">
+                <h4 className="text-sm font-black text-[var(--missio-text-main)]">
+                  İlk Patron / Owner Kullanıcısı
+                </h4>
+                <p className="mt-1 text-xs font-bold leading-5 text-[var(--missio-text-muted)]">
+                  Bu kullanıcı işletmenin ilk sahibi olarak oluşturulur.
+                </p>
               </div>
-            </div>
 
-            <TextInput
-              label="Abonelik Başlangıç"
-              icon={CalendarClock}
-              value={subscriptionStartDate}
-              type="date"
-              onChange={setSubscriptionStartDate}
-            />
+              <TextInput
+                label="Patron Adı Soyadı"
+                icon={UserRound}
+                value={ownerDisplayName}
+                onChange={setOwnerDisplayName}
+              />
 
-            <TextInput
-              label="Abonelik Bitiş"
-              icon={CalendarClock}
-              value={subscriptionEndDate}
-              type="date"
-              onChange={setSubscriptionEndDate}
-            />
+              <TextInput
+                label="Patron Kullanıcı Adı"
+                icon={UserRound}
+                value={ownerUsername}
+                onChange={setOwnerUsername}
+              />
 
-            <TextInput
-              label="Kullanıcı Limiti"
-              icon={UsersRound}
-              value={maxUsers}
-              type="number"
-              onChange={setMaxUsers}
-            />
+              <TextInput
+                label="Patron E-posta"
+                icon={UserRound}
+                value={ownerEmail}
+                type="email"
+                onChange={setOwnerEmail}
+              />
 
-            <button
-              type="button"
-              onClick={handleCreateBusiness}
-              disabled={isSaving}
-              className="mt-2 flex min-h-14 items-center justify-center gap-2 rounded-[1.4rem] bg-[var(--missio-primary)] px-4 py-3 text-sm font-black text-white shadow-lg shadow-cyan-500/20 active:scale-95 disabled:opacity-70"
-            >
-              {isSaving ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />}
-              {isSaving ? "Oluşturuluyor..." : "İşletme Oluştur"}
-            </button>
-          </div>
-        </section>
-      ) : null}
+              <TextInput
+                label="Patron Telefon"
+                icon={UserRound}
+                value={ownerPhone}
+                onChange={setOwnerPhone}
+              />
 
-      {activeTab === "users" ? (
-        <section className="rounded-[2rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] p-5">
-          <SectionTitle
-            eyebrow="Kullanıcı Yönetimi"
-            title="Patron, Yönetici ve Personel"
-            icon={UsersRound}
-          />
-          <p className="rounded-[1.4rem] bg-[var(--missio-page-bg)] p-4 text-sm font-bold leading-6 text-[var(--missio-text-muted)]">
-            Bu bölümde işletmeye göre kullanıcı listesi, rol değişikliği, aktif/pasif kullanıcı ve geçici şifre verme işlemleri olacak.
-          </p>
-        </section>
-      ) : null}
+              <TextInput
+                label="Geçici Şifre"
+                icon={KeyRound}
+                value={temporaryPassword}
+                type="text"
+                onChange={setTemporaryPassword}
+              />
 
-      {activeTab === "passwords" ? (
-        <section className="rounded-[2rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] p-5">
-          <SectionTitle
-            eyebrow="Şifre Talepleri"
-            title="Şifremi Unuttum Yönetimi"
-            icon={KeyRound}
-          />
-          <p className="rounded-[1.4rem] bg-[var(--missio-page-bg)] p-4 text-sm font-bold leading-6 text-[var(--missio-text-muted)]">
-            İşletme kodu ve kullanıcı adına göre gelen şifre sıfırlama talepleri burada listelenecek.
-          </p>
-        </section>
-      ) : null}
+              <div className="rounded-[1.4rem] border border-cyan-400/25 bg-cyan-400/10 p-4">
+                <h4 className="text-sm font-black text-[var(--missio-text-main)]">
+                  Abonelik Bilgileri
+                </h4>
+                <p className="mt-1 text-xs font-bold leading-5 text-[var(--missio-text-muted)]">
+                  Plan, deneme süresi ve kullanıcı limiti burada belirlenir.
+                </p>
+              </div>
 
-      {activeTab === "subscriptions" ? (
-        <section className="rounded-[2rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] p-5">
-          <SectionTitle
-            eyebrow="Abonelik Yönetimi"
-            title="Plan, Süre ve Limitler"
-            icon={CreditCard}
-          />
-          <p className="rounded-[1.4rem] bg-[var(--missio-page-bg)] p-4 text-sm font-bold leading-6 text-[var(--missio-text-muted)]">
-            Demo, Lite, Pro planları; abonelik bitiş tarihi, kullanıcı limiti ve askıya alma işlemleri bu bölümde yönetilecek.
-          </p>
-        </section>
-      ) : null}
+              <div className="grid gap-2">
+                <span className="text-sm font-black text-[var(--missio-text-main)]">
+                  Plan
+                </span>
 
-      {activeTab === "system" ? (
-        <section className="rounded-[2rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] p-5">
-          <SectionTitle
-            eyebrow="Sistem"
-            title="Bağlantı ve Yönetim Durumu"
-            icon={Settings}
-          />
-
-          <div className="grid gap-3">
-            <div className="rounded-[1.4rem] bg-[var(--missio-page-bg)] p-4">
-              <div className="flex items-center gap-3">
-                <Database size={21} className="text-[var(--missio-primary)]" />
-                <div>
-                  <h4 className="text-sm font-black text-[var(--missio-text-main)]">
-                    Firestore
-                  </h4>
-                  <p className="mt-1 text-xs font-bold text-[var(--missio-text-muted)]">
-                    Bağlantı aktif.
-                  </p>
+                <div className="grid grid-cols-3 gap-2">
+                  {["demo", "lite", "pro"].map((item) => (
+                    <button
+                      key={item}
+                      type="button"
+                      onClick={() => setPlan(item)}
+                      className={[
+                        "min-h-11 rounded-2xl border px-3 text-xs font-black active:scale-95",
+                        plan === item
+                          ? "border-[var(--missio-primary)] bg-[var(--missio-primary)] text-white"
+                          : "border-[var(--missio-border)] bg-[var(--missio-page-bg)] text-[var(--missio-text-main)]",
+                      ].join(" ")}
+                    >
+                      {getPlanLabel(item)}
+                    </button>
+                  ))}
                 </div>
               </div>
-            </div>
 
-            <div className="rounded-[1.4rem] bg-[var(--missio-page-bg)] p-4">
-              <div className="flex items-center gap-3">
-                <ShieldCheck size={21} className="text-[var(--missio-primary)]" />
-                <div>
-                  <h4 className="text-sm font-black text-[var(--missio-text-main)]">
-                    Süperadmin
-                  </h4>
-                  <p className="mt-1 text-xs font-bold text-[var(--missio-text-muted)]">
-                    {currentUser.email}
-                  </p>
+              <div className="grid gap-2">
+                <span className="text-sm font-black text-[var(--missio-text-main)]">
+                  Abonelik Durumu
+                </span>
+
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    ["trial", "Deneme"],
+                    ["active", "Aktif"],
+                    ["suspended", "Askıda"],
+                    ["cancelled", "İptal"],
+                  ].map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setSubscriptionStatus(value)}
+                      className={[
+                        "min-h-11 rounded-2xl border px-3 text-xs font-black active:scale-95",
+                        subscriptionStatus === value
+                          ? "border-[var(--missio-primary)] bg-[var(--missio-primary)] text-white"
+                          : "border-[var(--missio-border)] bg-[var(--missio-page-bg)] text-[var(--missio-text-main)]",
+                      ].join(" ")}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <TextInput
+                label="Abonelik Başlangıç"
+                icon={CalendarClock}
+                value={subscriptionStartDate}
+                type="date"
+                onChange={setSubscriptionStartDate}
+              />
+
+              <TextInput
+                label="Abonelik Bitiş"
+                icon={CalendarClock}
+                value={subscriptionEndDate}
+                type="date"
+                onChange={setSubscriptionEndDate}
+              />
+
+              <TextInput
+                label="Kullanıcı Limiti"
+                icon={UsersRound}
+                value={maxUsers}
+                type="number"
+                onChange={setMaxUsers}
+              />
+
+              <button
+                type="button"
+                onClick={handleCreateBusiness}
+                disabled={isSaving}
+                className="mt-2 flex min-h-14 items-center justify-center gap-2 rounded-[1.4rem] bg-[var(--missio-primary)] px-4 py-3 text-sm font-black text-white shadow-lg shadow-cyan-500/20 active:scale-95 disabled:opacity-70"
+              >
+                {isSaving ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />}
+                {isSaving ? "Oluşturuluyor..." : "İşletme ve Patron Oluştur"}
+              </button>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {activeView === "users" ? (
+        <section>
+          <BackButton onClick={() => setActiveView("home")} />
+
+          <div className="rounded-[2rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] p-5">
+            <SectionTitle
+              eyebrow="Kullanıcı Yönetimi"
+              title="Patron, Yönetici ve Personel"
+              icon={UsersRound}
+            />
+
+            <p className="rounded-[1.4rem] bg-[var(--missio-page-bg)] p-4 text-sm font-bold leading-6 text-[var(--missio-text-muted)]">
+              Bu bölümde süperadmin işletme seçerek patron, yönetici ve personel kullanıcılarını oluşturacak. Personel oluştururken bağlı olduğu yönetici seçilebilecek.
+            </p>
+          </div>
+        </section>
+      ) : null}
+
+      {activeView === "passwords" ? (
+        <section>
+          <BackButton onClick={() => setActiveView("home")} />
+
+          <div className="rounded-[2rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] p-5">
+            <SectionTitle
+              eyebrow="Şifre Talepleri"
+              title="Şifremi Unuttum Yönetimi"
+              icon={KeyRound}
+            />
+
+            <p className="rounded-[1.4rem] bg-[var(--missio-page-bg)] p-4 text-sm font-bold leading-6 text-[var(--missio-text-muted)]">
+              İşletme kodu ve kullanıcı adına göre gelen şifre sıfırlama talepleri burada listelenecek.
+            </p>
+          </div>
+        </section>
+      ) : null}
+
+      {activeView === "subscriptions" ? (
+        <section>
+          <BackButton onClick={() => setActiveView("home")} />
+
+          <div className="rounded-[2rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] p-5">
+            <SectionTitle
+              eyebrow="Abonelik Yönetimi"
+              title="Plan, Süre ve Limitler"
+              icon={CreditCard}
+            />
+
+            <p className="rounded-[1.4rem] bg-[var(--missio-page-bg)] p-4 text-sm font-bold leading-6 text-[var(--missio-text-muted)]">
+              Demo, Lite, Pro planları; abonelik bitiş tarihi, kullanıcı limiti ve askıya alma işlemleri bu bölümde yönetilecek.
+            </p>
+          </div>
+        </section>
+      ) : null}
+
+      {activeView === "system" ? (
+        <section>
+          <BackButton onClick={() => setActiveView("home")} />
+
+          <div className="rounded-[2rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] p-5">
+            <SectionTitle
+              eyebrow="Sistem"
+              title="Bağlantı ve Yönetim Durumu"
+              icon={Settings}
+            />
+
+            <div className="grid gap-3">
+              <div className="rounded-[1.4rem] bg-[var(--missio-page-bg)] p-4">
+                <div className="flex items-center gap-3">
+                  <Database size={21} className="text-[var(--missio-primary)]" />
+                  <div>
+                    <h4 className="text-sm font-black text-[var(--missio-text-main)]">
+                      Firestore
+                    </h4>
+                    <p className="mt-1 text-xs font-bold text-[var(--missio-text-muted)]">
+                      Bağlantı aktif.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-[1.4rem] bg-[var(--missio-page-bg)] p-4">
+                <div className="flex items-center gap-3">
+                  <ShieldCheck size={21} className="text-[var(--missio-primary)]" />
+                  <div>
+                    <h4 className="text-sm font-black text-[var(--missio-text-main)]">
+                      Süperadmin
+                    </h4>
+                    <p className="mt-1 text-xs font-bold text-[var(--missio-text-muted)]">
+                      {currentUser.email}
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>

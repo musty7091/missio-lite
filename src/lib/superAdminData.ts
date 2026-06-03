@@ -1,4 +1,5 @@
 import type { User } from "firebase/auth";
+import { getFunctions, httpsCallable } from "firebase/functions";
 import {
   collection,
   doc,
@@ -6,8 +7,9 @@ import {
   serverTimestamp,
   setDoc,
 } from "firebase/firestore";
-import { db } from "./firebase";
+import { firebaseApp, db } from "./firebase";
 
+const functions = getFunctions(firebaseApp, "europe-west1");
 const SUPER_ADMIN_EMAIL = "admin@missio-lite.com";
 
 export type BusinessListItem = {
@@ -15,7 +17,27 @@ export type BusinessListItem = {
   businessCode: string;
   businessName: string;
   ownerEmail: string;
+  ownerName: string;
   status: string;
+  plan: string;
+  subscriptionStatus: string;
+  subscriptionStartDate: string;
+  subscriptionEndDate: string;
+  maxUsers: number;
+};
+
+export type CreateBusinessWithOwnerInput = {
+  businessCode: string;
+  businessName: string;
+  businessPhone: string;
+  businessAddress: string;
+
+  ownerDisplayName: string;
+  ownerUsername: string;
+  ownerEmail: string;
+  ownerPhone: string;
+  temporaryPassword: string;
+
   plan: string;
   subscriptionStatus: string;
   subscriptionStartDate: string;
@@ -44,57 +66,29 @@ export async function ensureSuperAdminProfile(currentUser: User) {
   );
 }
 
-export async function createBusinessFromSuperAdmin(input: {
-  businessCode: string;
-  businessName: string;
-  ownerEmail: string;
-  plan: string;
-  subscriptionStatus: string;
-  subscriptionStartDate: string;
-  subscriptionEndDate: string;
-  maxUsers: number;
-}) {
-  const businessCode = input.businessCode.trim().toLowerCase();
-  const businessName = input.businessName.trim();
-  const ownerEmail = input.ownerEmail.trim().toLowerCase();
-
-  if (!businessCode) {
-    throw new Error("İşletme kodu zorunludur.");
-  }
-
-  if (!businessName) {
-    throw new Error("İşletme adı zorunludur.");
-  }
-
-  if (!ownerEmail) {
-    throw new Error("Patron e-posta adresi zorunludur.");
-  }
-
-  await setDoc(
-    doc(db, "businesses", businessCode),
+export async function createBusinessFromSuperAdmin(
+  input: CreateBusinessWithOwnerInput,
+): Promise<BusinessListItem> {
+  const callable = httpsCallable<
+    CreateBusinessWithOwnerInput,
     {
-      businessId: businessCode,
-      businessCode,
-      businessName,
-      ownerEmail,
-      status: "active",
-      plan: input.plan,
-      subscriptionStatus: input.subscriptionStatus,
-      subscriptionStartDate: input.subscriptionStartDate,
-      subscriptionEndDate: input.subscriptionEndDate,
-      maxUsers: input.maxUsers,
-      timezone: "Europe/Istanbul",
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    },
-    { merge: true },
-  );
+      ok: boolean;
+      businessId: string;
+      businessName: string;
+      ownerUid: string;
+      ownerUsername: string;
+      ownerEmail: string;
+    }
+  >(functions, "createBusinessWithOwner");
+
+  const result = await callable(input);
 
   return {
-    businessId: businessCode,
-    businessCode,
-    businessName,
-    ownerEmail,
+    businessId: result.data.businessId,
+    businessCode: result.data.businessId,
+    businessName: result.data.businessName,
+    ownerEmail: result.data.ownerEmail,
+    ownerName: input.ownerDisplayName,
     status: "active",
     plan: input.plan,
     subscriptionStatus: input.subscriptionStatus,
@@ -116,6 +110,7 @@ export async function listBusinessesForSuperAdmin(): Promise<BusinessListItem[]>
         businessCode: String(data.businessCode ?? documentSnapshot.id),
         businessName: String(data.businessName ?? documentSnapshot.id),
         ownerEmail: String(data.ownerEmail ?? ""),
+        ownerName: String(data.ownerName ?? ""),
         status: String(data.status ?? "active"),
         plan: String(data.plan ?? "lite"),
         subscriptionStatus: String(data.subscriptionStatus ?? "active"),
