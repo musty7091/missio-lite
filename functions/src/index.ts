@@ -231,17 +231,6 @@ async function ensureUsernameAvailable(input: {
   throw new HttpsError("already-exists", "Bu kullanıcı adı bu işletmede zaten kullanılıyor.");
 }
 
-export const whoAmI = onCall(async (request) => {
-  const caller = await assertAuthenticated(request.auth);
-  const superAdmin = await isSuperAdmin(caller.uid, caller.email);
-
-  return {
-    ok: true,
-    uid: caller.uid,
-    email: caller.email,
-    isSuperAdmin: superAdmin,
-  };
-});
 
 export const createBusinessWithOwner = onCall(async (request) => {
   await assertSuperAdmin(request.auth);
