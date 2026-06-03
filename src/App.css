@@ -257,3 +257,50 @@
   border: 1px solid rgba(45, 212, 191, 0.28);
 }
 /* MISSIO_SAFE_THEME_END */
+/* MISSIO_BOSS_HOME_START */
+.boss-action-card {
+  min-height: 126px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  border: 1px solid var(--missio-border);
+  border-radius: 1.65rem;
+  background: var(--missio-page-bg);
+  color: var(--missio-text-main);
+  padding: 14px;
+  text-align: center;
+  transition:
+    transform 0.16s ease,
+    border-color 0.16s ease,
+    background 0.16s ease;
+}
+
+.boss-action-card svg {
+  color: var(--missio-primary);
+}
+
+.boss-action-card strong {
+  color: var(--missio-text-main);
+  font-size: 0.9rem;
+  font-weight: 950;
+}
+
+.boss-action-card span {
+  max-width: 9rem;
+  color: var(--missio-text-muted);
+  font-size: 0.72rem;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.boss-action-card:hover {
+  border-color: color-mix(in srgb, var(--missio-primary) 42%, var(--missio-border));
+  background: color-mix(in srgb, var(--missio-primary) 6%, var(--missio-page-bg));
+}
+
+.boss-action-card:active {
+  transform: scale(0.97);
+}
+/* MISSIO_BOSS_HOME_END */

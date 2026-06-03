@@ -1,0 +1,165 @@
+﻿import {
+  BarChart3,
+  ClipboardCheck,
+  FileCheck2,
+  MapPin,
+  PlusSquare,
+  UserPlus,
+  UsersRound,
+} from "lucide-react";
+
+type BossHomePanelProps = {
+  onGoToReports: () => void;
+  onGoToApprovals: () => void;
+  onGoToProfile: () => void;
+};
+
+const summaryItems = [
+  {
+    label: "Bugünkü Görev",
+    value: "0",
+    note: "Firestore bağlanınca canlı veri",
+  },
+  {
+    label: "Onay Bekleyen",
+    value: "0",
+    note: "Kontrol bekleyen iş yok",
+  },
+  {
+    label: "Konum İsteği",
+    value: "0",
+    note: "Aktif yoklama yok",
+  },
+];
+
+export function BossHomePanel({
+  onGoToReports,
+  onGoToApprovals,
+  onGoToProfile,
+}: BossHomePanelProps) {
+  return (
+    <div className="grid gap-4">
+      <section className="overflow-hidden rounded-[2rem] bg-slate-950 p-5 text-white shadow-2xl shadow-slate-900/20 dark:bg-slate-950">
+        <p className="text-xs font-black uppercase tracking-wide text-cyan-300">
+          Günlük Özet
+        </p>
+
+        <h2 className="mt-2 text-3xl font-black tracking-tight">
+          Ertan Market
+        </h2>
+
+        <p className="mt-2 text-sm font-bold leading-6 text-slate-300">
+          Patron paneli hazır. Bir sonraki adımda bu kartlar Firestore’daki
+          gerçek Ertan Market verileriyle beslenecek.
+        </p>
+
+        <div className="mt-5 grid grid-cols-3 gap-2">
+          {summaryItems.map((item) => (
+            <div
+              key={item.label}
+              className="rounded-2xl bg-white/10 p-3 ring-1 ring-white/10"
+            >
+              <p className="text-2xl font-black">{item.value}</p>
+              <span className="mt-1 block text-[0.7rem] font-black text-slate-200">
+                {item.label}
+              </span>
+              <small className="mt-1 block text-[0.62rem] font-bold leading-4 text-slate-400">
+                {item.note}
+              </small>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="rounded-[2rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] p-5 shadow-xl shadow-slate-900/5 dark:shadow-black/25">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-black uppercase tracking-wide text-[var(--missio-primary)]">
+              Hızlı İşlemler
+            </p>
+            <h3 className="mt-1 text-xl font-black tracking-tight text-[var(--missio-text-main)]">
+              Patron Paneli
+            </h3>
+          </div>
+
+          <ClipboardCheck className="text-[var(--missio-primary)]" size={24} />
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            type="button"
+            className="boss-action-card"
+          >
+            <PlusSquare size={23} />
+            <strong>Görev Ata</strong>
+            <span>Personele görev oluştur</span>
+          </button>
+
+          <button
+            type="button"
+            className="boss-action-card"
+          >
+            <MapPin size={23} />
+            <strong>Konum İste</strong>
+            <span>Manuel yoklama başlat</span>
+          </button>
+
+          <button
+            type="button"
+            className="boss-action-card"
+            onClick={onGoToProfile}
+          >
+            <UserPlus size={23} />
+            <strong>Kullanıcı Ekle</strong>
+            <span>Personel hesabı hazırla</span>
+          </button>
+
+          <button
+            type="button"
+            className="boss-action-card"
+            onClick={onGoToApprovals}
+          >
+            <FileCheck2 size={23} />
+            <strong>Onaylar</strong>
+            <span>Tamamlanan işleri kontrol et</span>
+          </button>
+
+          <button
+            type="button"
+            className="boss-action-card"
+            onClick={onGoToReports}
+          >
+            <BarChart3 size={23} />
+            <strong>Raporlar</strong>
+            <span>Son 14 günü incele</span>
+          </button>
+
+          <button
+            type="button"
+            className="boss-action-card"
+            onClick={onGoToProfile}
+          >
+            <UsersRound size={23} />
+            <strong>Personel</strong>
+            <span>Ekip durumunu gör</span>
+          </button>
+        </div>
+      </section>
+
+      <section className="rounded-[2rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] p-5 shadow-xl shadow-slate-900/5 dark:shadow-black/25">
+        <p className="text-xs font-black uppercase tracking-wide text-[var(--missio-primary)]">
+          Bugünkü İş Akışı
+        </p>
+
+        <h3 className="mt-1 text-xl font-black tracking-tight text-[var(--missio-text-main)]">
+          Henüz canlı görev yok
+        </h3>
+
+        <p className="mt-2 text-sm font-bold leading-6 text-[var(--missio-text-muted)]">
+          Görev listesi ana ekranda uzamayacak. Görev atama sistemi bağlanınca
+          detaylar eski Missio’daki gibi ayrı panel içinde açılacak.
+        </p>
+      </section>
+    </div>
+  );
+}

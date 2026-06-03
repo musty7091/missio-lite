@@ -3,6 +3,7 @@ import "./App.css";
 import { auth } from "./lib/firebase";
 import { AppHeader, type ThemeMode } from "./components/layout/AppHeader";
 import { BottomNavigation, type AppTab } from "./components/layout/BottomNavigation";
+import { BossHomePanel } from "./components/boss/BossHomePanel";
 import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
@@ -123,45 +124,21 @@ function LoginScreen() {
   );
 }
 
-function TasksTab() {
+function TasksTab({
+  onGoToReports,
+  onGoToApprovals,
+  onGoToProfile,
+}: {
+  onGoToReports: () => void;
+  onGoToApprovals: () => void;
+  onGoToProfile: () => void;
+}) {
   return (
-    <section className="rounded-[2rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] p-5 shadow-xl shadow-slate-900/5 dark:shadow-black/25">
-      <p className="text-xs font-black uppercase tracking-wide text-[var(--missio-primary)]">
-        Günlük Özet
-      </p>
-
-      <h2 className="mt-2 text-2xl font-black tracking-tight text-[var(--missio-text-main)]">
-        Ertan Market
-      </h2>
-
-      <p className="mt-2 text-sm font-bold leading-6 text-[var(--missio-text-muted)]">
-        Alt navigasyon eski Missio mantığıyla taşındı. Bir sonraki adımda patron ana ekranı
-        parça parça eklenecek.
-      </p>
-
-      <div className="mt-5 grid grid-cols-3 gap-2">
-        <div className="rounded-2xl bg-[var(--missio-page-bg)] p-3">
-          <p className="text-2xl font-black text-[var(--missio-text-main)]">0</p>
-          <span className="text-xs font-bold text-[var(--missio-text-muted)]">
-            Görev
-          </span>
-        </div>
-
-        <div className="rounded-2xl bg-[var(--missio-page-bg)] p-3">
-          <p className="text-2xl font-black text-[var(--missio-text-main)]">0</p>
-          <span className="text-xs font-bold text-[var(--missio-text-muted)]">
-            Onay
-          </span>
-        </div>
-
-        <div className="rounded-2xl bg-[var(--missio-page-bg)] p-3">
-          <p className="text-2xl font-black text-[var(--missio-text-main)]">0</p>
-          <span className="text-xs font-bold text-[var(--missio-text-muted)]">
-            Konum
-          </span>
-        </div>
-      </div>
-    </section>
+    <BossHomePanel
+      onGoToReports={onGoToReports}
+      onGoToApprovals={onGoToApprovals}
+      onGoToProfile={onGoToProfile}
+    />
   );
 }
 
@@ -268,7 +245,13 @@ function AuthenticatedPanel({
         </div>
 
         <div className="grid gap-4">
-          {activeTab === "tasks" ? <TasksTab /> : null}
+          {activeTab === "tasks" ? (
+            <TasksTab
+              onGoToReports={() => setActiveTab("reports")}
+              onGoToApprovals={() => setActiveTab("notifications")}
+              onGoToProfile={() => setActiveTab("profile")}
+            />
+          ) : null}
           {activeTab === "reports" ? <ReportsTab /> : null}
           {activeTab === "notifications" ? <NotificationsTab /> : null}
           {activeTab === "profile" ? <ProfileTab currentUser={currentUser} /> : null}
@@ -342,3 +325,5 @@ function App() {
 }
 
 export default App;
+
+
