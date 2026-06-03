@@ -1,4 +1,4 @@
-﻿import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import "./App.css";
 import { auth } from "./lib/firebase";
 import {
@@ -10,6 +10,8 @@ import { BottomNavigation, type AppTab } from "./components/layout/BottomNavigat
 import { BossHomePanel } from "./components/boss/BossHomePanel";
 import { ActionSheet } from "./components/common/ActionSheet";
 import { ForgotPasswordSheet } from "./components/auth/ForgotPasswordSheet";
+import { BackendSetupStatus } from "./components/common/BackendSetupStatus";
+import { SuperAdminPanel } from "./components/superadmin/SuperAdminPanel";
 import {
   Building2,
   KeyRound,
@@ -26,6 +28,7 @@ import {
 
 const THEME_STORAGE_KEY = "missio-lite-theme";
 const DEFAULT_BUSINESS_CODE = "ertanmarket";
+const SUPER_ADMIN_EMAIL = "admin@missio-lite.com";
 
 function getInitialTheme(): ThemeMode {
   const savedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
@@ -51,6 +54,14 @@ function resolveLoginEmail(businessCode: string, username: string) {
   const normalizedBusinessCode = businessCode.trim().toLowerCase();
   const normalizedUsername = username.trim();
 
+  if (!normalizedBusinessCode && normalizedUsername.toLowerCase() === "admin") {
+    return SUPER_ADMIN_EMAIL;
+  }
+
+  if (!normalizedBusinessCode) {
+    throw new Error("BUSINESS_CODE_REQUIRED");
+  }
+
   if (normalizedBusinessCode !== DEFAULT_BUSINESS_CODE) {
     throw new Error("INVALID_BUSINESS_CODE");
   }
@@ -73,6 +84,10 @@ function resolveLoginEmail(businessCode: string, username: string) {
   }
 
   return mappedEmail;
+}
+
+function isSuperAdminUser(currentUser: User) {
+  return currentUser.email?.toLowerCase() === SUPER_ADMIN_EMAIL;
 }
 
 function LoginField({
@@ -129,7 +144,10 @@ function LoginScreen() {
   async function handleLogin() {
     setMessage("");
 
-    if (!businessCode.trim() || !username.trim() || !password.trim()) {
+    const isSuperAdminLogin =
+      !businessCode.trim() && username.trim().toLowerCase() === "admin";
+
+    if ((!isSuperAdminLogin && !businessCode.trim()) || !username.trim() || !password.trim()) {
       setMessage("Lütfen işletme kodu, kullanıcı adı ve şifre gir.");
       return;
     }
@@ -350,6 +368,25 @@ function AuthenticatedPanel({
   onLogout: () => void;
 }) {
   const [activeTab, setActiveTab] = useState<AppTab>("tasks");
+  const isSuperAdmin = isSuperAdminUser(currentUser);
+
+  if (isSuperAdmin) {
+    return (
+      <main className="min-h-screen bg-[var(--missio-page-bg)] px-4 py-4 text-[var(--missio-text-main)]">
+        <div className="mx-auto flex min-h-[calc(100vh-2rem)] max-w-[520px] flex-col">
+          <AppHeader
+            theme={theme}
+            displayName="admin"
+            roleLabel="Süperadmin"
+            onToggleTheme={onToggleTheme}
+            onLogout={onLogout}
+          />
+
+          <SuperAdminPanel currentUser={currentUser} />
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-[var(--missio-page-bg)] px-4 py-4 text-[var(--missio-text-main)]">
@@ -365,6 +402,8 @@ function AuthenticatedPanel({
         <div className="mb-3 inline-flex w-fit items-center rounded-full border border-[var(--missio-border)] bg-[var(--missio-card-bg)] px-3 py-2 text-xs font-black text-[var(--missio-text-muted)]">
           Ertan Market · ertanmarket
         </div>
+
+        <BackendSetupStatus currentUser={currentUser} />
 
         <div className="grid gap-4">
           {activeTab === "tasks" ? (

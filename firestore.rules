@@ -1,0 +1,111 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isInitialOwner() {
+      return signedIn()
+        && request.auth.token.email == "m.mkaradeniz@icloud.com";
+    }
+
+    function isBootstrapSuperAdmin() {
+      return signedIn()
+        && request.auth.token.email == "admin@missio-lite.com";
+    }
+
+    function hasSuperAdminProfile() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.globalRole == "super_admin";
+    }
+
+    function isSuperAdmin() {
+      return isBootstrapSuperAdmin() || hasSuperAdminProfile();
+    }
+
+    function isBusinessMember(businessId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/businesses/$(businessId)/members/$(request.auth.uid));
+    }
+
+    function memberRole(businessId) {
+      return get(/databases/$(database)/documents/businesses/$(businessId)/members/$(request.auth.uid)).data.role;
+    }
+
+    function isBusinessOwnerOrManager(businessId) {
+      return isBusinessMember(businessId)
+        && memberRole(businessId) in ["owner", "boss", "manager"];
+    }
+
+    match /users/{userId} {
+      allow read: if signedIn()
+        && (request.auth.uid == userId || isSuperAdmin());
+
+      allow create, update: if signedIn()
+        && (request.auth.uid == userId || isSuperAdmin() || isInitialOwner());
+
+      allow delete: if false;
+    }
+
+    match /businesses/{businessId} {
+      allow read: if signedIn()
+        && (isSuperAdmin() || isBusinessMember(businessId) || isInitialOwner());
+
+      allow create, update: if isSuperAdmin() || isInitialOwner();
+
+      allow delete: if false;
+
+      match /members/{memberId} {
+        allow read: if signedIn()
+          && (isSuperAdmin() || isBusinessMember(businessId) || isInitialOwner());
+
+        allow create, update: if isSuperAdmin()
+          || isInitialOwner()
+          || isBusinessOwnerOrManager(businessId);
+
+        allow delete: if false;
+      }
+
+      match /tasks/{taskId} {
+        allow read: if signedIn()
+          && (isSuperAdmin() || isBusinessMember(businessId) || isInitialOwner());
+
+        allow create, update: if isSuperAdmin()
+          || isInitialOwner()
+          || isBusinessOwnerOrManager(businessId);
+
+        allow delete: if false;
+      }
+
+      match /locationChecks/{checkId} {
+        allow read: if signedIn()
+          && (isSuperAdmin() || isBusinessMember(businessId) || isInitialOwner());
+
+        allow create, update: if isSuperAdmin()
+          || isInitialOwner()
+          || isBusinessOwnerOrManager(businessId);
+
+        allow delete: if false;
+      }
+
+      match /passwordResetRequests/{requestId} {
+        allow read: if signedIn()
+          && (isSuperAdmin() || isBusinessOwnerOrManager(businessId) || isInitialOwner());
+
+        allow create: if true;
+
+        allow update: if signedIn()
+          && (isSuperAdmin() || isBusinessOwnerOrManager(businessId) || isInitialOwner());
+
+        allow delete: if false;
+      }
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
