@@ -15,6 +15,8 @@ import { UserAddSheet } from "./UserAddSheet";
 import { StaffListSheet } from "./StaffListSheet";
 
 type BossHomePanelProps = {
+  businessName: string;
+  businessId: string;
   onGoToReports: () => void;
   onGoToApprovals: () => void;
   onGoToProfile: () => void;
@@ -41,6 +43,8 @@ const summaryItems = [
 ];
 
 export function BossHomePanel({
+  businessName,
+  businessId,
   onGoToReports,
   onGoToApprovals,
   onGoToProfile,
@@ -67,11 +71,11 @@ export function BossHomePanel({
         </p>
 
         <h2 className="mt-2 text-3xl font-black tracking-tight">
-          Ertan Market
+          {businessName}
         </h2>
 
         <p className="mt-2 text-sm font-bold leading-6 text-slate-300">
-          Patron paneli hazır. Görev atama, konum yoklama, kullanıcı ekleme ve personel listesi panelleri arayüz olarak eklendi.
+          İşletme kodu: {businessId}. Görev atama, konum yoklama, kullanıcı ekleme ve personel listesi panelleri veritabanı yapısına bağlanacak.
         </p>
 
         <div className="mt-5 grid grid-cols-3 gap-2">

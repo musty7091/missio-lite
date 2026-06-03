@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import "./App.css";
-import { auth } from "./lib/firebase";
+import { auth, db } from "./lib/firebase";
 import {
   AppHeader,
   MissioMiniLogo,
@@ -10,7 +10,6 @@ import { BottomNavigation, type AppTab } from "./components/layout/BottomNavigat
 import { BossHomePanel } from "./components/boss/BossHomePanel";
 import { ActionSheet } from "./components/common/ActionSheet";
 import { ForgotPasswordSheet } from "./components/auth/ForgotPasswordSheet";
-import { BackendSetupStatus } from "./components/common/BackendSetupStatus";
 import { SuperAdminPanel } from "./components/superadmin/SuperAdminPanel";
 import {
   Building2,
@@ -25,9 +24,10 @@ import {
   signOut,
   type User,
 } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
 
 const THEME_STORAGE_KEY = "missio-lite-theme";
-const DEFAULT_BUSINESS_CODE = "ertanmarket";
+const ACTIVE_BUSINESS_STORAGE_KEY = "missio-lite-active-business-id";
 const SUPER_ADMIN_EMAIL = "admin@missio-lite.com";
 
 function getInitialTheme(): ThemeMode {
@@ -50,11 +50,11 @@ function applyTheme(theme: ThemeMode) {
   window.localStorage.setItem(THEME_STORAGE_KEY, theme);
 }
 
-function resolveLoginEmail(businessCode: string, username: string) {
+async function resolveLoginEmail(businessCode: string, username: string) {
   const normalizedBusinessCode = businessCode.trim().toLowerCase();
-  const normalizedUsername = username.trim();
+  const normalizedUsername = username.trim().toLowerCase();
 
-  if (!normalizedBusinessCode && normalizedUsername.toLowerCase() === "admin") {
+  if (!normalizedBusinessCode && normalizedUsername === "admin") {
     return SUPER_ADMIN_EMAIL;
   }
 
@@ -62,32 +62,59 @@ function resolveLoginEmail(businessCode: string, username: string) {
     throw new Error("BUSINESS_CODE_REQUIRED");
   }
 
-  if (normalizedBusinessCode !== DEFAULT_BUSINESS_CODE) {
-    throw new Error("INVALID_BUSINESS_CODE");
-  }
-
-  if (normalizedUsername.includes("@")) {
-    return normalizedUsername;
-  }
-
-  const usernameMap: Record<string, string> = {
-    mustafa: "m.mkaradeniz@icloud.com",
-    patron: "m.mkaradeniz@icloud.com",
-    owner: "m.mkaradeniz@icloud.com",
-    "m.mkaradeniz": "m.mkaradeniz@icloud.com",
-  };
-
-  const mappedEmail = usernameMap[normalizedUsername.toLowerCase()];
-
-  if (!mappedEmail) {
+  if (!normalizedUsername) {
     throw new Error("UNKNOWN_USERNAME");
   }
 
-  return mappedEmail;
+  const usernameRef = doc(
+    db,
+    "businesses",
+    normalizedBusinessCode,
+    "usernames",
+    normalizedUsername,
+  );
+
+  const usernameSnapshot = await getDoc(usernameRef);
+
+  if (!usernameSnapshot.exists()) {
+    throw new Error("UNKNOWN_USERNAME");
+  }
+
+  const usernameData = usernameSnapshot.data();
+  const email = String(usernameData.email ?? "").trim();
+
+  if (!email) {
+    throw new Error("UNKNOWN_USERNAME");
+  }
+
+  return email;
 }
 
 function isSuperAdminUser(currentUser: User) {
   return currentUser.email?.toLowerCase() === SUPER_ADMIN_EMAIL;
+}
+
+type BusinessSession = {
+  id: string;
+  name: string;
+  role: string;
+  roleLabel: string;
+};
+
+function getBusinessRoleLabel(role: string) {
+  if (role === "owner" || role === "boss") {
+    return "Patron";
+  }
+
+  if (role === "manager") {
+    return "Yönetici";
+  }
+
+  if (role === "staff") {
+    return "Personel";
+  }
+
+  return "Kullanıcı";
 }
 
 function LoginField({
@@ -155,9 +182,19 @@ function LoginScreen() {
     try {
       setIsSubmitting(true);
 
-      const loginEmail = resolveLoginEmail(businessCode, username);
+      const loginEmail = await resolveLoginEmail(businessCode, username);
 
       await signInWithEmailAndPassword(auth, loginEmail, password);
+
+      if (isSuperAdminLogin) {
+        window.localStorage.removeItem(ACTIVE_BUSINESS_STORAGE_KEY);
+      } else {
+        window.localStorage.setItem(
+          ACTIVE_BUSINESS_STORAGE_KEY,
+          businessCode.trim().toLowerCase(),
+        );
+      }
+
       setPassword("");
     } catch (error) {
       console.error(error);
@@ -314,7 +351,13 @@ function NotificationsTab() {
   );
 }
 
-function ProfileTab({ currentUser }: { currentUser: User }) {
+function ProfileTab({
+  currentUser,
+  businessSession,
+}: {
+  currentUser: User;
+  businessSession: BusinessSession;
+}) {
   return (
     <section className="rounded-[2rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] p-5 shadow-xl shadow-slate-900/5 dark:shadow-black/25">
       <p className="text-xs font-black uppercase tracking-wide text-[var(--missio-primary)]">
@@ -339,7 +382,10 @@ function ProfileTab({ currentUser }: { currentUser: User }) {
             İşletme
           </span>
           <p className="mt-1 text-sm font-black text-[var(--missio-text-main)]">
-            Ertan Market
+            {businessSession.name}
+          </p>
+          <p className="mt-1 text-xs font-bold text-[var(--missio-text-muted)]">
+            {businessSession.id}
           </p>
         </div>
 
@@ -348,14 +394,13 @@ function ProfileTab({ currentUser }: { currentUser: User }) {
             Rol
           </span>
           <p className="mt-1 text-sm font-black text-[var(--missio-text-main)]">
-            Owner / Patron
+            {businessSession.roleLabel}
           </p>
         </div>
       </div>
     </section>
   );
 }
-
 function AuthenticatedPanel({
   currentUser,
   theme,
@@ -368,7 +413,94 @@ function AuthenticatedPanel({
   onLogout: () => void;
 }) {
   const [activeTab, setActiveTab] = useState<AppTab>("tasks");
+  const [businessSession, setBusinessSession] = useState<BusinessSession | null>(null);
+  const [businessLoadError, setBusinessLoadError] = useState("");
   const isSuperAdmin = isSuperAdminUser(currentUser);
+
+  useEffect(() => {
+    if (isSuperAdmin) {
+      setBusinessSession(null);
+      setBusinessLoadError("");
+      return;
+    }
+
+    const activeBusinessId = (
+      window.localStorage.getItem(ACTIVE_BUSINESS_STORAGE_KEY) ?? ""
+    )
+      .trim()
+      .toLowerCase();
+
+    if (!activeBusinessId) {
+      setBusinessLoadError("Aktif işletme bilgisi bulunamadı. Lütfen çıkış yapıp tekrar giriş yap.");
+      return;
+    }
+
+    let isCancelled = false;
+
+    async function loadBusinessSession() {
+      try {
+        setBusinessLoadError("");
+
+        const businessRef = doc(db, "businesses", activeBusinessId);
+        const memberRef = doc(
+          db,
+          "businesses",
+          activeBusinessId,
+          "members",
+          currentUser.uid,
+        );
+
+        const [businessSnapshot, memberSnapshot] = await Promise.all([
+          getDoc(businessRef),
+          getDoc(memberRef),
+        ]);
+
+        if (!businessSnapshot.exists()) {
+          throw new Error("BUSINESS_NOT_FOUND");
+        }
+
+        if (!memberSnapshot.exists()) {
+          throw new Error("MEMBER_NOT_FOUND");
+        }
+
+        const businessData = businessSnapshot.data();
+        const memberData = memberSnapshot.data();
+
+        const businessName = String(
+          businessData.name ??
+            businessData.businessName ??
+            businessData.title ??
+            activeBusinessId,
+        );
+
+        const role = String(memberData.role ?? "user");
+
+        if (!isCancelled) {
+          setBusinessSession({
+            id: activeBusinessId,
+            name: businessName,
+            role,
+            roleLabel: getBusinessRoleLabel(role),
+          });
+        }
+      } catch (error) {
+        console.error(error);
+
+        if (!isCancelled) {
+          setBusinessSession(null);
+          setBusinessLoadError(
+            "İşletme bilgisi veritabanından okunamadı. Lütfen süperadmin panelinden işletme ve üyelik kaydını kontrol et.",
+          );
+        }
+      }
+    }
+
+    void loadBusinessSession();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [currentUser.uid, isSuperAdmin]);
 
   if (isSuperAdmin) {
     return (
@@ -388,26 +520,66 @@ function AuthenticatedPanel({
     );
   }
 
+  if (businessLoadError) {
+    return (
+      <main className="min-h-screen bg-[var(--missio-page-bg)] px-4 py-4 text-[var(--missio-text-main)]">
+        <div className="mx-auto flex min-h-[calc(100vh-2rem)] max-w-[520px] flex-col">
+          <AppHeader
+            theme={theme}
+            displayName={currentUser.email ?? "Kullanıcı"}
+            roleLabel="Kullanıcı"
+            onToggleTheme={onToggleTheme}
+            onLogout={onLogout}
+          />
+
+          <section className="mt-6 rounded-[2rem] border border-red-400/30 bg-red-400/10 p-5 text-sm font-black leading-6 text-red-500">
+            {businessLoadError}
+          </section>
+        </div>
+      </main>
+    );
+  }
+
+  if (!businessSession) {
+    return (
+      <main className="min-h-screen bg-[var(--missio-page-bg)] px-4 py-4 text-[var(--missio-text-main)]">
+        <div className="mx-auto flex min-h-[calc(100vh-2rem)] max-w-[520px] flex-col">
+          <AppHeader
+            theme={theme}
+            displayName={currentUser.email ?? "Kullanıcı"}
+            roleLabel="Yükleniyor"
+            onToggleTheme={onToggleTheme}
+            onLogout={onLogout}
+          />
+
+          <section className="mt-6 rounded-[2rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] p-5 text-sm font-black text-[var(--missio-text-muted)]">
+            İşletme bilgisi veritabanından okunuyor...
+          </section>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-[var(--missio-page-bg)] px-4 py-4 text-[var(--missio-text-main)]">
       <div className="mx-auto flex min-h-[calc(100vh-2rem)] max-w-[520px] flex-col">
         <AppHeader
           theme={theme}
-          displayName={currentUser.email ?? "Mustafa"}
-          roleLabel="Patron"
+          displayName={currentUser.email ?? "Kullanıcı"}
+          roleLabel={businessSession.roleLabel}
           onToggleTheme={onToggleTheme}
           onLogout={onLogout}
         />
 
         <div className="mb-3 inline-flex w-fit items-center rounded-full border border-[var(--missio-border)] bg-[var(--missio-card-bg)] px-3 py-2 text-xs font-black text-[var(--missio-text-muted)]">
-          Ertan Market · ertanmarket
+          {businessSession.name} · {businessSession.id}
         </div>
-
-        <BackendSetupStatus currentUser={currentUser} />
 
         <div className="grid gap-4">
           {activeTab === "tasks" ? (
             <BossHomePanel
+              businessName={businessSession.name}
+              businessId={businessSession.id}
               onGoToReports={() => setActiveTab("reports")}
               onGoToApprovals={() => setActiveTab("notifications")}
               onGoToProfile={() => setActiveTab("profile")}
@@ -416,12 +588,17 @@ function AuthenticatedPanel({
 
           {activeTab === "reports" ? <ReportsTab /> : null}
           {activeTab === "notifications" ? <NotificationsTab /> : null}
-          {activeTab === "profile" ? <ProfileTab currentUser={currentUser} /> : null}
+          {activeTab === "profile" ? (
+            <ProfileTab
+              currentUser={currentUser}
+              businessSession={businessSession}
+            />
+          ) : null}
         </div>
 
         <BottomNavigation
           activeTab={activeTab}
-          notificationCount={1}
+          notificationCount={0}
           role="owner"
           onTabChange={setActiveTab}
         />
@@ -429,7 +606,6 @@ function AuthenticatedPanel({
     </main>
   );
 }
-
 function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);

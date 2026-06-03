@@ -28,38 +28,7 @@ type StaffMember = {
   completedTasks: number;
 };
 
-const initialStaffList: StaffMember[] = [
-  {
-    id: "ahmet-personel",
-    name: "Ahmet Personel",
-    email: "ahmet@ertanmarket.com",
-    phone: "0533 000 00 01",
-    role: "staff",
-    status: "active",
-    todayTasks: 0,
-    completedTasks: 0,
-  },
-  {
-    id: "ali-personel",
-    name: "Ali Personel",
-    email: "ali@ertanmarket.com",
-    phone: "0533 000 00 02",
-    role: "staff",
-    status: "active",
-    todayTasks: 0,
-    completedTasks: 0,
-  },
-  {
-    id: "demo-manager",
-    name: "Demo Manager",
-    email: "manager@ertanmarket.com",
-    phone: "0533 000 00 03",
-    role: "manager",
-    status: "active",
-    todayTasks: 0,
-    completedTasks: 0,
-  },
-];
+const initialStaffList: StaffMember[] = [];
 
 function getRoleLabel(role: StaffRole) {
   if (role === "manager") {
@@ -379,6 +348,12 @@ export function StaffListSheet() {
       {message ? (
         <div className="rounded-[1.4rem] border border-cyan-400/30 bg-cyan-400/10 p-4 text-sm font-black text-[var(--missio-primary)]">
           {message}
+        </div>
+      ) : null}
+
+      {staffList.length === 0 ? (
+        <div className="rounded-[1.5rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] p-4 text-sm font-bold leading-6 text-[var(--missio-text-muted)]">
+          Henüz personel kaydı yok. Personel kayıtları süperadmin veya patron tarafından oluşturulduğunda burada görünecek.
         </div>
       ) : null}
 
