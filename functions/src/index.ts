@@ -397,6 +397,10 @@ export const createBusinessUser = onCall(async (request) => {
   const temporaryPassword = validatePassword(requiredString(data, "temporaryPassword", "Geçici şifre"));
   const managerUid = optionalString(data, "managerUid");
 
+  if (role === "staff" && !managerUid) {
+    throw new HttpsError("invalid-argument", "Personel için bağlı yönetici seçilmelidir.");
+  }
+
   const businessRef = db.collection("businesses").doc(businessId);
   const businessSnapshot = await businessRef.get();
 
@@ -481,6 +485,7 @@ export const createBusinessUser = onCall(async (request) => {
       role,
       status: "active",
       managerUid: role === "staff" ? managerUid || null : null,
+      managerName: role === "staff" ? managerName : null,
       createdAt: now,
       updatedAt: now,
     },

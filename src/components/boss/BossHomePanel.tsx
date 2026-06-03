@@ -214,7 +214,7 @@ export function BossHomePanel({
         isOpen={activeSheet === "user"}
         onClose={closeSheet}
       >
-        <UserAddSheet onCreated={showMessage} />
+        <UserAddSheet businessId={businessId} onCreated={showMessage} />
       </ActionSheet>
 
       <ActionSheet
