@@ -2,6 +2,7 @@
 import "./App.css";
 import { auth } from "./lib/firebase";
 import { AppHeader, type ThemeMode } from "./components/layout/AppHeader";
+import { BottomNavigation, type AppTab } from "./components/layout/BottomNavigation";
 import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
@@ -122,6 +123,122 @@ function LoginScreen() {
   );
 }
 
+function TasksTab() {
+  return (
+    <section className="rounded-[2rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] p-5 shadow-xl shadow-slate-900/5 dark:shadow-black/25">
+      <p className="text-xs font-black uppercase tracking-wide text-[var(--missio-primary)]">
+        Günlük Özet
+      </p>
+
+      <h2 className="mt-2 text-2xl font-black tracking-tight text-[var(--missio-text-main)]">
+        Ertan Market
+      </h2>
+
+      <p className="mt-2 text-sm font-bold leading-6 text-[var(--missio-text-muted)]">
+        Alt navigasyon eski Missio mantığıyla taşındı. Bir sonraki adımda patron ana ekranı
+        parça parça eklenecek.
+      </p>
+
+      <div className="mt-5 grid grid-cols-3 gap-2">
+        <div className="rounded-2xl bg-[var(--missio-page-bg)] p-3">
+          <p className="text-2xl font-black text-[var(--missio-text-main)]">0</p>
+          <span className="text-xs font-bold text-[var(--missio-text-muted)]">
+            Görev
+          </span>
+        </div>
+
+        <div className="rounded-2xl bg-[var(--missio-page-bg)] p-3">
+          <p className="text-2xl font-black text-[var(--missio-text-main)]">0</p>
+          <span className="text-xs font-bold text-[var(--missio-text-muted)]">
+            Onay
+          </span>
+        </div>
+
+        <div className="rounded-2xl bg-[var(--missio-page-bg)] p-3">
+          <p className="text-2xl font-black text-[var(--missio-text-main)]">0</p>
+          <span className="text-xs font-bold text-[var(--missio-text-muted)]">
+            Konum
+          </span>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ReportsTab() {
+  return (
+    <section className="rounded-[2rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] p-5 shadow-xl shadow-slate-900/5 dark:shadow-black/25">
+      <p className="text-xs font-black uppercase tracking-wide text-[var(--missio-primary)]">
+        Rapor
+      </p>
+      <h2 className="mt-2 text-2xl font-black tracking-tight text-[var(--missio-text-main)]">
+        Son 14 Gün
+      </h2>
+      <p className="mt-2 text-sm font-bold leading-6 text-[var(--missio-text-muted)]">
+        Rapor paneli sonraki fazda Firestore günlük özetlerinden beslenecek.
+      </p>
+    </section>
+  );
+}
+
+function NotificationsTab() {
+  return (
+    <section className="rounded-[2rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] p-5 shadow-xl shadow-slate-900/5 dark:shadow-black/25">
+      <p className="text-xs font-black uppercase tracking-wide text-[var(--missio-primary)]">
+        Onaylar
+      </p>
+      <h2 className="mt-2 text-2xl font-black tracking-tight text-[var(--missio-text-main)]">
+        Bekleyen Kontroller
+      </h2>
+      <p className="mt-2 text-sm font-bold leading-6 text-[var(--missio-text-muted)]">
+        Görev ve konum onayları burada görünecek.
+      </p>
+    </section>
+  );
+}
+
+function ProfileTab({ currentUser }: { currentUser: User }) {
+  return (
+    <section className="rounded-[2rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] p-5 shadow-xl shadow-slate-900/5 dark:shadow-black/25">
+      <p className="text-xs font-black uppercase tracking-wide text-[var(--missio-primary)]">
+        Hesabım
+      </p>
+      <h2 className="mt-2 text-2xl font-black tracking-tight text-[var(--missio-text-main)]">
+        Profil
+      </h2>
+
+      <div className="mt-5 grid gap-3">
+        <div className="rounded-2xl bg-[var(--missio-page-bg)] p-4">
+          <span className="text-xs font-black text-[var(--missio-text-muted)]">
+            E-posta
+          </span>
+          <p className="mt-1 break-all text-sm font-black text-[var(--missio-text-main)]">
+            {currentUser.email}
+          </p>
+        </div>
+
+        <div className="rounded-2xl bg-[var(--missio-page-bg)] p-4">
+          <span className="text-xs font-black text-[var(--missio-text-muted)]">
+            İşletme
+          </span>
+          <p className="mt-1 text-sm font-black text-[var(--missio-text-main)]">
+            Ertan Market
+          </p>
+        </div>
+
+        <div className="rounded-2xl bg-[var(--missio-page-bg)] p-4">
+          <span className="text-xs font-black text-[var(--missio-text-muted)]">
+            Rol
+          </span>
+          <p className="mt-1 text-sm font-black text-[var(--missio-text-main)]">
+            Owner / Patron
+          </p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function AuthenticatedPanel({
   currentUser,
   theme,
@@ -133,9 +250,11 @@ function AuthenticatedPanel({
   onToggleTheme: () => void;
   onLogout: () => void;
 }) {
+  const [activeTab, setActiveTab] = useState<AppTab>("tasks");
+
   return (
-    <main className="page">
-      <section className="login-card auth-card">
+    <main className="min-h-screen bg-[var(--missio-page-bg)] px-4 py-4 text-[var(--missio-text-main)]">
+      <div className="mx-auto flex min-h-[calc(100vh-2rem)] max-w-[520px] flex-col">
         <AppHeader
           theme={theme}
           displayName={currentUser.email ?? "Mustafa"}
@@ -144,30 +263,24 @@ function AuthenticatedPanel({
           onLogout={onLogout}
         />
 
-        <div className="info-box">
-          <strong>Giriş başarılı</strong>
-          <span>Oturum açan kullanıcı: {currentUser.email}</span>
+        <div className="mb-3 inline-flex w-fit items-center rounded-full border border-[var(--missio-border)] bg-[var(--missio-card-bg)] px-3 py-2 text-xs font-black text-[var(--missio-text-muted)]">
+          Ertan Market · ertanmarket
         </div>
 
-        <div className="dashboard-preview">
-          <div>
-            <strong>İşletme</strong>
-            <span>Ertan Market</span>
-          </div>
-          <div>
-            <strong>Business ID</strong>
-            <span>ertanmarket</span>
-          </div>
-          <div>
-            <strong>Rol</strong>
-            <span>Owner / Patron</span>
-          </div>
+        <div className="grid gap-4">
+          {activeTab === "tasks" ? <TasksTab /> : null}
+          {activeTab === "reports" ? <ReportsTab /> : null}
+          {activeTab === "notifications" ? <NotificationsTab /> : null}
+          {activeTab === "profile" ? <ProfileTab currentUser={currentUser} /> : null}
         </div>
 
-        <p className="footer-note">
-          Bu adımda sadece eski Missio Header, logo ve tema butonu taşındı.
-        </p>
-      </section>
+        <BottomNavigation
+          activeTab={activeTab}
+          notificationCount={1}
+          role="owner"
+          onTabChange={setActiveTab}
+        />
+      </div>
     </main>
   );
 }
