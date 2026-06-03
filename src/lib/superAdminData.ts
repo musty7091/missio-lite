@@ -1,4 +1,4 @@
-﻿import type { User } from "firebase/auth";
+import type { User } from "firebase/auth";
 import {
   collection,
   doc,
@@ -17,6 +17,10 @@ export type BusinessListItem = {
   ownerEmail: string;
   status: string;
   plan: string;
+  subscriptionStatus: string;
+  subscriptionStartDate: string;
+  subscriptionEndDate: string;
+  maxUsers: number;
 };
 
 export async function ensureSuperAdminProfile(currentUser: User) {
@@ -44,6 +48,11 @@ export async function createBusinessFromSuperAdmin(input: {
   businessCode: string;
   businessName: string;
   ownerEmail: string;
+  plan: string;
+  subscriptionStatus: string;
+  subscriptionStartDate: string;
+  subscriptionEndDate: string;
+  maxUsers: number;
 }) {
   const businessCode = input.businessCode.trim().toLowerCase();
   const businessName = input.businessName.trim();
@@ -69,7 +78,11 @@ export async function createBusinessFromSuperAdmin(input: {
       businessName,
       ownerEmail,
       status: "active",
-      plan: "lite",
+      plan: input.plan,
+      subscriptionStatus: input.subscriptionStatus,
+      subscriptionStartDate: input.subscriptionStartDate,
+      subscriptionEndDate: input.subscriptionEndDate,
+      maxUsers: input.maxUsers,
       timezone: "Europe/Istanbul",
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
@@ -83,7 +96,11 @@ export async function createBusinessFromSuperAdmin(input: {
     businessName,
     ownerEmail,
     status: "active",
-    plan: "lite",
+    plan: input.plan,
+    subscriptionStatus: input.subscriptionStatus,
+    subscriptionStartDate: input.subscriptionStartDate,
+    subscriptionEndDate: input.subscriptionEndDate,
+    maxUsers: input.maxUsers,
   };
 }
 
@@ -101,6 +118,10 @@ export async function listBusinessesForSuperAdmin(): Promise<BusinessListItem[]>
         ownerEmail: String(data.ownerEmail ?? ""),
         status: String(data.status ?? "active"),
         plan: String(data.plan ?? "lite"),
+        subscriptionStatus: String(data.subscriptionStatus ?? "active"),
+        subscriptionStartDate: String(data.subscriptionStartDate ?? ""),
+        subscriptionEndDate: String(data.subscriptionEndDate ?? ""),
+        maxUsers: Number(data.maxUsers ?? 10),
       };
     })
     .sort((a, b) => a.businessName.localeCompare(b.businessName, "tr"));
