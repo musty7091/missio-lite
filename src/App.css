@@ -1,0 +1,143 @@
+﻿.page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at top left, rgba(30, 172, 154, 0.18), transparent 32%),
+    linear-gradient(135deg, #eef7f6 0%, #eaf0f8 48%, #f7fbff 100%);
+}
+
+.login-card {
+  width: 100%;
+  max-width: 460px;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(23, 32, 51, 0.08);
+  border-radius: 28px;
+  padding: 30px;
+  box-shadow: 0 28px 80px rgba(28, 48, 73, 0.16);
+}
+
+.brand-area {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 28px;
+}
+
+.brand-icon {
+  width: 58px;
+  height: 58px;
+  border-radius: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #103a4a;
+  color: #ffffff;
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -1px;
+}
+
+.brand-area h1 {
+  margin: 0;
+  font-size: 30px;
+  line-height: 1.1;
+  color: #102b3c;
+}
+
+.brand-area p {
+  margin: 6px 0 0;
+  color: #637083;
+  font-size: 14px;
+}
+
+.info-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px;
+  border-radius: 18px;
+  background: #effaf7;
+  border: 1px solid #caeee6;
+  margin-bottom: 22px;
+}
+
+.info-box strong {
+  color: #0f766e;
+  font-size: 15px;
+}
+
+.info-box span {
+  color: #486174;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.login-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: #344256;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.login-form input {
+  height: 48px;
+  border-radius: 14px;
+  border: 1px solid #d6e0e8;
+  background: #ffffff;
+  padding: 0 14px;
+  color: #172033;
+  outline: none;
+}
+
+.login-form input:focus {
+  border-color: #1eac9a;
+  box-shadow: 0 0 0 4px rgba(30, 172, 154, 0.12);
+}
+
+.login-form button {
+  height: 52px;
+  border: none;
+  border-radius: 16px;
+  background: #103a4a;
+  color: #ffffff;
+  font-weight: 800;
+  cursor: pointer;
+  margin-top: 4px;
+}
+
+.login-form button:hover {
+  filter: brightness(1.08);
+}
+
+.footer-note {
+  margin: 20px 0 0;
+  text-align: center;
+  color: #8794a5;
+  font-size: 13px;
+}
+
+@media (max-width: 520px) {
+  .page {
+    padding: 14px;
+  }
+
+  .login-card {
+    padding: 22px;
+    border-radius: 22px;
+  }
+
+  .brand-area h1 {
+    font-size: 26px;
+  }
+}
