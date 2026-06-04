@@ -1,10 +1,12 @@
-﻿import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   BarChart3,
   ClipboardCheck,
   FileCheck2,
+  ListChecks,
   MapPin,
   PlusSquare,
+  RefreshCw,
   UserPlus,
   UsersRound,
 } from "lucide-react";
@@ -13,6 +15,11 @@ import { TaskAssignSheet } from "./TaskAssignSheet";
 import { LocationCheckSheet } from "./LocationCheckSheet";
 import { UserAddSheet } from "./UserAddSheet";
 import { StaffListSheet } from "./StaffListSheet";
+import {
+  getTaskStatusLabel,
+  listBusinessTasks,
+  type BusinessTaskListItem,
+} from "../../lib/businessTaskData";
 
 type BossHomePanelProps = {
   businessName: string;
@@ -24,23 +31,87 @@ type BossHomePanelProps = {
 
 type ActiveSheet = "task" | "location" | "user" | "staff" | null;
 
-const summaryItems = [
-  {
-    label: "Bugünkü Görev",
-    value: "0",
-    note: "Firestore bağlanınca canlı veri",
-  },
-  {
-    label: "Onay Bekleyen",
-    value: "0",
-    note: "Kontrol bekleyen iş yok",
-  },
-  {
-    label: "Konum İsteği",
-    value: "0",
-    note: "Aktif yoklama yok",
-  },
-];
+function getPriorityClass(priority: string) {
+  if (priority === "Kritik") {
+    return "bg-red-500/10 text-red-500";
+  }
+
+  if (priority === "Acil") {
+    return "bg-orange-500/10 text-orange-500";
+  }
+
+  if (priority === "Önemli") {
+    return "bg-amber-500/10 text-amber-500";
+  }
+
+  return "bg-cyan-500/10 text-[var(--missio-primary)]";
+}
+
+function TaskCard({ task }: { task: BusinessTaskListItem }) {
+  return (
+    <article className="rounded-[1.5rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] p-4 shadow-sm">
+      <div className="flex items-start gap-3">
+        <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-cyan-500/10 text-[var(--missio-primary)]">
+          <ListChecks size={21} />
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h4 className="text-sm font-black text-[var(--missio-text-main)]">
+                {task.title}
+              </h4>
+              <p className="mt-1 text-xs font-bold leading-5 text-[var(--missio-text-muted)]">
+                Atanan: {task.assignedToName || "Bilinmiyor"}
+              </p>
+            </div>
+
+            <span
+              className={[
+                "shrink-0 rounded-full px-2.5 py-1 text-[0.65rem] font-black",
+                getPriorityClass(task.priority),
+              ].join(" ")}
+            >
+              {task.priority}
+            </span>
+          </div>
+
+          {task.description ? (
+            <p className="mt-3 text-xs font-bold leading-5 text-[var(--missio-text-muted)]">
+              {task.description}
+            </p>
+          ) : null}
+
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <div className="rounded-2xl bg-[var(--missio-page-bg)] p-3">
+              <span className="block text-[0.65rem] font-black text-[var(--missio-text-muted)]">
+                Durum
+              </span>
+              <strong className="mt-1 block text-xs font-black text-[var(--missio-text-main)]">
+                {getTaskStatusLabel(task.status)}
+              </strong>
+            </div>
+
+            <div className="rounded-2xl bg-[var(--missio-page-bg)] p-3">
+              <span className="block text-[0.65rem] font-black text-[var(--missio-text-muted)]">
+                Tip
+              </span>
+              <strong className="mt-1 block text-xs font-black text-[var(--missio-text-main)]">
+                {task.taskType}
+              </strong>
+            </div>
+          </div>
+
+          {task.dueDate ? (
+            <p className="mt-3 text-xs font-black text-[var(--missio-primary)]">
+              Son tarih: {task.dueDate}
+            </p>
+          ) : null}
+        </div>
+      </div>
+    </article>
+  );
+}
 
 export function BossHomePanel({
   businessName,
@@ -51,16 +122,56 @@ export function BossHomePanel({
 }: BossHomePanelProps) {
   const [activeSheet, setActiveSheet] = useState<ActiveSheet>(null);
   const [lastMessage, setLastMessage] = useState("");
+  const [tasks, setTasks] = useState<BusinessTaskListItem[]>([]);
+  const [isLoadingTasks, setIsLoadingTasks] = useState(true);
+  const [taskMessage, setTaskMessage] = useState("");
 
   void onGoToProfile;
+
+  const assignedTaskCount = useMemo(
+    () =>
+      tasks.filter(
+        (task) => task.status === "assigned" || task.status === "in_progress",
+      ).length,
+    [tasks],
+  );
+
+  const pendingApprovalCount = useMemo(
+    () =>
+      tasks.filter(
+        (task) => task.status === "completed" && task.requiresApproval,
+      ).length,
+    [tasks],
+  );
+
+  async function loadTasks() {
+    try {
+      setIsLoadingTasks(true);
+      setTaskMessage("");
+
+      const taskList = await listBusinessTasks(businessId);
+      setTasks(taskList);
+    } catch (error) {
+      console.error(error);
+      setTasks([]);
+      setTaskMessage("Görev listesi veritabanından okunamadı.");
+    } finally {
+      setIsLoadingTasks(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadTasks();
+  }, [businessId]);
 
   function closeSheet() {
     setActiveSheet(null);
   }
 
-  function showMessage(message: string) {
+  async function showMessage(message: string) {
     setLastMessage(message);
     closeSheet();
+    await loadTasks();
   }
 
   return (
@@ -75,24 +186,39 @@ export function BossHomePanel({
         </h2>
 
         <p className="mt-2 text-sm font-bold leading-6 text-slate-300">
-          İşletme kodu: {businessId}. Görev atama, konum yoklama, kullanıcı ekleme ve personel listesi panelleri veritabanı yapısına bağlanacak.
+          İşletme kodu: {businessId}. Görevler artık Firestore tasks kayıtlarından okunuyor.
         </p>
 
         <div className="mt-5 grid grid-cols-3 gap-2">
-          {summaryItems.map((item) => (
-            <div
-              key={item.label}
-              className="rounded-2xl bg-white/10 p-3 ring-1 ring-white/10"
-            >
-              <p className="text-2xl font-black">{item.value}</p>
-              <span className="mt-1 block text-[0.7rem] font-black text-slate-200">
-                {item.label}
-              </span>
-              <small className="mt-1 block text-[0.62rem] font-bold leading-4 text-slate-400">
-                {item.note}
-              </small>
-            </div>
-          ))}
+          <div className="rounded-2xl bg-white/10 p-3 ring-1 ring-white/10">
+            <p className="text-2xl font-black">{assignedTaskCount}</p>
+            <span className="mt-1 block text-[0.7rem] font-black text-slate-200">
+              Aktif Görev
+            </span>
+            <small className="mt-1 block text-[0.62rem] font-bold leading-4 text-slate-400">
+              Atanan / devam eden
+            </small>
+          </div>
+
+          <div className="rounded-2xl bg-white/10 p-3 ring-1 ring-white/10">
+            <p className="text-2xl font-black">{pendingApprovalCount}</p>
+            <span className="mt-1 block text-[0.7rem] font-black text-slate-200">
+              Onay Bekleyen
+            </span>
+            <small className="mt-1 block text-[0.62rem] font-bold leading-4 text-slate-400">
+              Tamamlanıp onay isteyen
+            </small>
+          </div>
+
+          <div className="rounded-2xl bg-white/10 p-3 ring-1 ring-white/10">
+            <p className="text-2xl font-black">0</p>
+            <span className="mt-1 block text-[0.7rem] font-black text-slate-200">
+              Konum İsteği
+            </span>
+            <small className="mt-1 block text-[0.62rem] font-bold leading-4 text-slate-400">
+              Aktif yoklama yok
+            </small>
+          </div>
         </div>
       </section>
 
@@ -180,17 +306,52 @@ export function BossHomePanel({
       </section>
 
       <section className="rounded-[2rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] p-5 shadow-xl shadow-slate-900/5 dark:shadow-black/25">
-        <p className="text-xs font-black uppercase tracking-wide text-[var(--missio-primary)]">
-          Bugünkü İş Akışı
-        </p>
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-black uppercase tracking-wide text-[var(--missio-primary)]">
+              Bugünkü İş Akışı
+            </p>
+            <h3 className="mt-1 text-xl font-black tracking-tight text-[var(--missio-text-main)]">
+              Görevler
+            </h3>
+          </div>
 
-        <h3 className="mt-1 text-xl font-black tracking-tight text-[var(--missio-text-main)]">
-          Henüz canlı görev yok
-        </h3>
+          <button
+            type="button"
+            onClick={loadTasks}
+            disabled={isLoadingTasks}
+            className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl border border-[var(--missio-border)] bg-[var(--missio-card-bg)] text-[var(--missio-primary)] active:scale-95 disabled:opacity-60"
+            aria-label="Görevleri yenile"
+          >
+            <RefreshCw size={19} />
+          </button>
+        </div>
 
-        <p className="mt-2 text-sm font-bold leading-6 text-[var(--missio-text-muted)]">
-          Görev listesi ana ekranda uzamayacak. Detaylar panel içinde açılacak.
-        </p>
+        {taskMessage ? (
+          <div className="mb-3 rounded-[1.4rem] border border-red-400/30 bg-red-400/10 p-4 text-sm font-black text-red-500">
+            {taskMessage}
+          </div>
+        ) : null}
+
+        {isLoadingTasks ? (
+          <p className="text-sm font-black text-[var(--missio-text-muted)]">
+            Görevler veritabanından okunuyor...
+          </p>
+        ) : null}
+
+        {!isLoadingTasks && tasks.length === 0 ? (
+          <p className="text-sm font-bold leading-6 text-[var(--missio-text-muted)]">
+            Henüz görev yok. Görev Ata kartından yeni görev oluşturabilirsin.
+          </p>
+        ) : null}
+
+        {!isLoadingTasks && tasks.length > 0 ? (
+          <div className="grid gap-3">
+            {tasks.slice(0, 5).map((task) => (
+              <TaskCard key={task.taskId} task={task} />
+            ))}
+          </div>
+        ) : null}
       </section>
 
       <ActionSheet
