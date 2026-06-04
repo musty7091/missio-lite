@@ -8,6 +8,8 @@ import {
 } from "./components/layout/AppHeader";
 import { BottomNavigation, type AppTab } from "./components/layout/BottomNavigation";
 import { BossHomePanel } from "./components/boss/BossHomePanel";
+import { ManagerHomePanel } from "./components/manager/ManagerHomePanel";
+import { StaffHomePanel } from "./components/staff/StaffHomePanel";
 import { ActionSheet } from "./components/common/ActionSheet";
 import { ForgotPasswordSheet } from "./components/auth/ForgotPasswordSheet";
 import { SuperAdminPanel } from "./components/superadmin/SuperAdminPanel";
@@ -555,6 +557,58 @@ function AuthenticatedPanel({
           <section className="mt-6 rounded-[2rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] p-5 text-sm font-black text-[var(--missio-text-muted)]">
             İşletme bilgisi veritabanından okunuyor...
           </section>
+        </div>
+      </main>
+    );
+  }
+
+  if (businessSession.role === "manager") {
+    return (
+      <main className="min-h-screen bg-[var(--missio-page-bg)] px-4 py-4 text-[var(--missio-text-main)]">
+        <div className="mx-auto flex min-h-[calc(100vh-2rem)] max-w-[520px] flex-col">
+          <AppHeader
+            theme={theme}
+            displayName={currentUser.email ?? "Kullanıcı"}
+            roleLabel={businessSession.roleLabel}
+            onToggleTheme={onToggleTheme}
+            onLogout={onLogout}
+          />
+
+          <div className="mb-3 inline-flex w-fit items-center rounded-full border border-[var(--missio-border)] bg-[var(--missio-card-bg)] px-3 py-2 text-xs font-black text-[var(--missio-text-muted)]">
+            {businessSession.name} · {businessSession.id}
+          </div>
+
+          <ManagerHomePanel
+            businessId={businessSession.id}
+            businessName={businessSession.name}
+            currentUser={currentUser}
+          />
+        </div>
+      </main>
+    );
+  }
+
+  if (businessSession.role === "staff") {
+    return (
+      <main className="min-h-screen bg-[var(--missio-page-bg)] px-4 py-4 text-[var(--missio-text-main)]">
+        <div className="mx-auto flex min-h-[calc(100vh-2rem)] max-w-[520px] flex-col">
+          <AppHeader
+            theme={theme}
+            displayName={currentUser.email ?? "Kullanıcı"}
+            roleLabel={businessSession.roleLabel}
+            onToggleTheme={onToggleTheme}
+            onLogout={onLogout}
+          />
+
+          <div className="mb-3 inline-flex w-fit items-center rounded-full border border-[var(--missio-border)] bg-[var(--missio-card-bg)] px-3 py-2 text-xs font-black text-[var(--missio-text-muted)]">
+            {businessSession.name} · {businessSession.id}
+          </div>
+
+          <StaffHomePanel
+            businessId={businessSession.id}
+            businessName={businessSession.name}
+            currentUser={currentUser}
+          />
         </div>
       </main>
     );
