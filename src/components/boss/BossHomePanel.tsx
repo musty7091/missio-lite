@@ -198,7 +198,7 @@ export function BossHomePanel({
         isOpen={activeSheet === "task"}
         onClose={closeSheet}
       >
-        <TaskAssignSheet onCreated={showMessage} />
+        <TaskAssignSheet businessId={businessId} onCreated={showMessage} />
       </ActionSheet>
 
       <ActionSheet
