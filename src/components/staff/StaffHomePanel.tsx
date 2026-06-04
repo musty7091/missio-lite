@@ -443,9 +443,33 @@ function TaskCard({
             ) : null}
 
             {task.status === "rejected" ? (
-              <div className="rounded-2xl bg-red-500/10 px-4 py-3 text-sm font-black text-red-500">
-                Görev reddedildi.
+              <div className="grid gap-2 rounded-2xl bg-red-500/10 px-4 py-3 text-sm font-black text-red-500">
+                <span>Görev reddedildi.</span>
+
+                {task.rejectedReason ? (
+                  <span className="text-xs font-bold leading-5">
+                    Neden: {task.rejectedReason}
+                  </span>
+                ) : null}
+
+                {task.rejectedByName ? (
+                  <span className="text-xs font-bold leading-5">
+                    Reddeden: {task.rejectedByName}
+                    {task.rejectedAtText ? ` · ${task.rejectedAtText}` : ""}
+                  </span>
+                ) : null}
               </div>
+            ) : null}
+
+            {task.status === "rejected" ? (
+              <button
+                type="button"
+                onClick={() => onStart(task.taskId)}
+                disabled={isUpdating}
+                className="rounded-2xl bg-[var(--missio-primary)] px-4 py-3 text-sm font-black text-white active:scale-[0.99] disabled:opacity-60"
+              >
+                {isUpdating ? "İşleniyor..." : "Düzeltmeye Al"}
+              </button>
             ) : null}
           </div>
 

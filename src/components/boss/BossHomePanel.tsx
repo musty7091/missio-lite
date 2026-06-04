@@ -219,12 +219,14 @@ function TaskCard({
   task: BusinessTaskListItem;
   onPreviewPhoto: (photo: ProofPhotoItem) => void;
   onApprove: (taskId: string) => void;
-  onReject: (taskId: string) => void;
+  onReject: (taskId: string, note: string) => void;
   isUpdating: boolean;
   approvalMode?: boolean;
 }) {
   const hasProof = hasTaskProofPhoto(task);
   const photoCount = task.proofPhotos.length;
+  const [rejectBoxOpen, setRejectBoxOpen] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
 
   return (
     <article className="rounded-[1.6rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] p-4 shadow-sm">
@@ -311,13 +313,57 @@ function TaskCard({
 
               <button
                 type="button"
-                onClick={() => onReject(task.taskId)}
+                onClick={() => setRejectBoxOpen(true)}
                 disabled={isUpdating}
                 className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-red-500 px-4 py-3 text-sm font-black text-white active:scale-[0.99] disabled:opacity-60"
               >
                 <XCircle size={18} />
                 {isUpdating ? "İşleniyor..." : "Reddet"}
               </button>
+            </div>
+          ) : null}
+
+          {approvalMode && rejectBoxOpen ? (
+            <div className="mt-3 grid gap-2 rounded-2xl border border-red-400/30 bg-red-500/10 p-3">
+              <label className="text-xs font-black text-red-500">
+                Reddetme nedeni
+              </label>
+
+              <textarea
+                value={rejectReason}
+                onChange={(event) => setRejectReason(event.target.value)}
+                rows={3}
+                placeholder="Eksik veya hatalı olan durumu yaz..."
+                className="w-full resize-none rounded-2xl border border-red-400/30 bg-[var(--missio-page-bg)] p-3 text-sm font-bold leading-6 text-[var(--missio-text-main)] outline-none"
+              />
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRejectBoxOpen(false);
+                    setRejectReason("");
+                  }}
+                  className="rounded-2xl border border-[var(--missio-border)] bg-[var(--missio-card-bg)] px-4 py-3 text-sm font-black text-[var(--missio-text-main)]"
+                >
+                  Vazgeç
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!rejectReason.trim()) {
+                      return;
+                    }
+
+                    onReject(task.taskId, rejectReason.trim());
+                  }}
+                  disabled={isUpdating || !rejectReason.trim()}
+                  className="rounded-2xl bg-red-500 px-4 py-3 text-sm font-black text-white disabled:opacity-60"
+                >
+                  {isUpdating ? "İşleniyor..." : "Reddetmeyi Onayla"}
+                </button>
+              </div>
             </div>
           ) : null}
 
@@ -415,7 +461,16 @@ export function BossHomePanel({
     await loadTasks();
   }
 
-  async function handleApprovalStatus(taskId: string, status: "approved" | "rejected") {
+  async function handleApprovalStatus(
+    taskId: string,
+    status: "approved" | "rejected",
+    note = "",
+  ) {
+    if (status === "rejected" && !note.trim()) {
+      setLastMessage("Reddetme nedeni zorunludur.");
+      return;
+    }
+
     try {
       setUpdatingTaskId(taskId);
       setTaskMessage("");
@@ -424,9 +479,13 @@ export function BossHomePanel({
         businessId,
         taskId,
         status,
+        note: note.trim(),
       });
 
       setLastMessage(status === "approved" ? "Görev onaylandı." : "Görev reddedildi.");
+      setActiveSheet(null);
+      setSelectedPhoto(null);
+
       await loadTasks();
     } catch (error) {
       console.error(error);
@@ -444,9 +503,10 @@ export function BossHomePanel({
     void handleApprovalStatus(taskId, "approved");
   }
 
-  function handleReject(taskId: string) {
-    void handleApprovalStatus(taskId, "rejected");
+  function handleReject(taskId: string, note: string) {
+    void handleApprovalStatus(taskId, "rejected", note);
   }
+
 
   return (
     <div className="grid gap-4">

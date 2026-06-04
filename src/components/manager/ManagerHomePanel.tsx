@@ -301,7 +301,7 @@ function TaskCard({
   onStart: (taskId: string) => void;
   onComplete: (taskId: string) => void;
   onApprove: (taskId: string) => void;
-  onReject: (taskId: string) => void;
+  onReject: (taskId: string, note: string) => void;
   onPhotoSelected: (taskId: string, event: ChangeEvent<HTMLInputElement>) => void;
   onPreviewPhoto: (photo: ProofPhotoItem) => void;
   onRemovePhoto: (taskId: string, photo: ProofPhotoItem) => void;
@@ -312,6 +312,8 @@ function TaskCard({
   const isMyTask = task.assignedToUid === currentUserUid;
   const hasProof = hasTaskProofPhoto(task);
   const photoCount = task.proofPhotos.length;
+  const [rejectBoxOpen, setRejectBoxOpen] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
   const canAddPhoto =
     isMyTask &&
     task.status === "in_progress" &&
@@ -485,12 +487,56 @@ function TaskCard({
 
                 <button
                   type="button"
-                  onClick={() => onReject(task.taskId)}
+                  onClick={() => setRejectBoxOpen(true)}
                   disabled={isUpdating}
                   className="rounded-2xl bg-red-500 px-4 py-3 text-sm font-black text-white active:scale-[0.99] disabled:opacity-60"
                 >
                   {isUpdating ? "İşleniyor..." : "Reddet"}
                 </button>
+              </div>
+            ) : null}
+
+            {!isMyTask && task.status === "completed" && task.requiresApproval && rejectBoxOpen ? (
+              <div className="grid gap-2 rounded-2xl border border-red-400/30 bg-red-500/10 p-3">
+                <label className="text-xs font-black text-red-500">
+                  Reddetme nedeni
+                </label>
+
+                <textarea
+                  value={rejectReason}
+                  onChange={(event) => setRejectReason(event.target.value)}
+                  rows={3}
+                  placeholder="Eksik veya hatalı olan durumu yaz..."
+                  className="w-full resize-none rounded-2xl border border-red-400/30 bg-[var(--missio-page-bg)] p-3 text-sm font-bold leading-6 text-[var(--missio-text-main)] outline-none"
+                />
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRejectBoxOpen(false);
+                      setRejectReason("");
+                    }}
+                    className="rounded-2xl border border-[var(--missio-border)] bg-[var(--missio-card-bg)] px-4 py-3 text-sm font-black text-[var(--missio-text-main)]"
+                  >
+                    Vazgeç
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!rejectReason.trim()) {
+                        return;
+                      }
+
+                      onReject(task.taskId, rejectReason.trim());
+                    }}
+                    disabled={isUpdating || !rejectReason.trim()}
+                    className="rounded-2xl bg-red-500 px-4 py-3 text-sm font-black text-white disabled:opacity-60"
+                  >
+                    {isUpdating ? "İşleniyor..." : "Reddetmeyi Onayla"}
+                  </button>
+                </div>
               </div>
             ) : null}
 
@@ -507,9 +553,33 @@ function TaskCard({
             ) : null}
 
             {task.status === "rejected" ? (
-              <div className="rounded-2xl bg-red-500/10 px-4 py-3 text-sm font-black text-red-500">
-                Görev reddedildi.
+              <div className="grid gap-2 rounded-2xl bg-red-500/10 px-4 py-3 text-sm font-black text-red-500">
+                <span>Görev reddedildi.</span>
+
+                {task.rejectedReason ? (
+                  <span className="text-xs font-bold leading-5">
+                    Neden: {task.rejectedReason}
+                  </span>
+                ) : null}
+
+                {task.rejectedByName ? (
+                  <span className="text-xs font-bold leading-5">
+                    Reddeden: {task.rejectedByName}
+                    {task.rejectedAtText ? ` · ${task.rejectedAtText}` : ""}
+                  </span>
+                ) : null}
               </div>
+            ) : null}
+
+            {isMyTask && task.status === "rejected" ? (
+              <button
+                type="button"
+                onClick={() => onStart(task.taskId)}
+                disabled={isUpdating}
+                className="rounded-2xl bg-[var(--missio-primary)] px-4 py-3 text-sm font-black text-white active:scale-[0.99] disabled:opacity-60"
+              >
+                {isUpdating ? "İşleniyor..." : "Düzeltmeye Al"}
+              </button>
             ) : null}
           </div>
 
@@ -546,7 +616,7 @@ function TaskList({
   onStart: (taskId: string) => void;
   onComplete: (taskId: string) => void;
   onApprove: (taskId: string) => void;
-  onReject: (taskId: string) => void;
+  onReject: (taskId: string, note: string) => void;
   onPhotoSelected: (taskId: string, event: ChangeEvent<HTMLInputElement>) => void;
   onPreviewPhoto: (photo: ProofPhotoItem) => void;
   onRemovePhoto: (taskId: string, photo: ProofPhotoItem) => void;
@@ -759,7 +829,13 @@ export function ManagerHomePanel({
   async function handleTaskStatusChange(
     taskId: string,
     status: "in_progress" | "completed" | "approved" | "rejected",
+    note = "",
   ) {
+    if (status === "rejected" && !note.trim()) {
+      setMessage("Reddetme nedeni zorunludur.");
+      return;
+    }
+
     try {
       setUpdatingTaskId(taskId);
       setMessage("");
@@ -768,6 +844,7 @@ export function ManagerHomePanel({
         businessId,
         taskId,
         status,
+        note: note.trim(),
       });
 
       if (status === "completed") {
@@ -775,8 +852,10 @@ export function ManagerHomePanel({
         setActiveSheet(null);
       } else if (status === "approved") {
         setMessage("Görev onaylandı.");
+        setActiveSheet(null);
       } else if (status === "rejected") {
         setMessage("Görev reddedildi.");
+        setActiveSheet(null);
       } else {
         setMessage("Görev başlatıldı.");
       }
@@ -795,6 +874,7 @@ export function ManagerHomePanel({
   }
 
   async function handlePhotoSelected(
+
     taskId: string,
     event: ChangeEvent<HTMLInputElement>,
   ) {
@@ -882,8 +962,8 @@ export function ManagerHomePanel({
     void handleTaskStatusChange(taskId, "approved");
   }
 
-  function handleTaskReject(taskId: string) {
-    void handleTaskStatusChange(taskId, "rejected");
+  function handleTaskReject(taskId: string, note: string) {
+    void handleTaskStatusChange(taskId, "rejected", note);
   }
 
   const taskListProps = {

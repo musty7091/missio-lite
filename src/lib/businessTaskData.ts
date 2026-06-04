@@ -93,6 +93,10 @@ export type BusinessTaskListItem = {
   proofPhotos: ProofPhotoItem[];
   proofPhotoUploadedAtText: string;
   createdAtText: string;
+  lastStatusNote: string;
+  rejectedReason: string;
+  rejectedByName: string;
+  rejectedAtText: string;
 };
 
 export type UpdateBusinessTaskStatusInput = {
@@ -452,6 +456,10 @@ export async function listBusinessTasks(
       proofPhotos: toProofPhotoItems(data),
       proofPhotoUploadedAtText: timestampToText(data.proofPhotoUploadedAt),
       createdAtText: timestampToText(data.createdAt),
+      lastStatusNote: String(data.lastStatusNote ?? ""),
+      rejectedReason: String(data.rejectedReason ?? data.lastStatusNote ?? ""),
+      rejectedByName: String(data.rejectedByName ?? ""),
+      rejectedAtText: timestampToText(data.rejectedAt),
     };
   });
 }

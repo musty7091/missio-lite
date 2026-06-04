@@ -814,6 +814,10 @@ export const updateBusinessTaskStatus = onCall(async (request) => {
     throw new HttpsError("invalid-argument", "Geçersiz görev durumu.");
   }
 
+  if (nextStatus === "rejected" && !note.trim()) {
+    throw new HttpsError("invalid-argument", "Görev reddedilirken neden yazılmalıdır.");
+  }
+
   const businessRef = db.collection("businesses").doc(businessId);
   const businessSnapshot = await businessRef.get();
 
@@ -961,13 +965,22 @@ export const updateBusinessTaskStatus = onCall(async (request) => {
   }
 
   if (nextStatus === "rejected") {
-    updatePayload.rejectedAt = now;
-    updatePayload.rejectedByUid = caller.uid;
-    updatePayload.rejectedByName =
+    const rejectedByName =
       callerMemberData?.displayName ??
       callerMemberData?.username ??
       caller.email ??
       "Sistem";
+
+    updatePayload.rejectedAt = now;
+    updatePayload.rejectedByUid = caller.uid;
+    updatePayload.rejectedByName = rejectedByName;
+    updatePayload.rejectedReason = note.trim();
+    updatePayload.rejectionHistory = FieldValue.arrayUnion({
+      reason: note.trim(),
+      rejectedAtIso: new Date().toISOString(),
+      rejectedByUid: caller.uid,
+      rejectedByName,
+    });
   }
 
   await taskRef.set(updatePayload, { merge: true });
