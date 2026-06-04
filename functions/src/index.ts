@@ -2,6 +2,7 @@ import { initializeApp } from "firebase-admin/app";
 import { getAuth, type UserRecord } from "firebase-admin/auth";
 import { FieldValue, getFirestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
+import { getMessaging } from "firebase-admin/messaging";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { setGlobalOptions } from "firebase-functions/v2";
 
@@ -659,6 +660,146 @@ export const updateBusinessMember = onCall(async (request) => {
 });
 
 
+
+type SendPushNotificationInput = {
+  businessId: string;
+  uid: string;
+  title: string;
+  body: string;
+  tag: string;
+  url?: string;
+  data?: Record<string, unknown>;
+};
+
+function createPushData(data: Record<string, unknown>) {
+  const pushData: Record<string, string> = {};
+
+  for (const [key, value] of Object.entries(data)) {
+    if (value === undefined || value === null) {
+      continue;
+    }
+
+    pushData[key] = String(value);
+  }
+
+  return pushData;
+}
+
+function isInvalidPushTokenErrorCode(errorCode: string) {
+  return [
+    "messaging/registration-token-not-registered",
+    "messaging/invalid-registration-token",
+  ].includes(errorCode);
+}
+
+async function sendPushNotificationToMember(input: SendPushNotificationInput) {
+  try {
+    const tokenSnapshot = await db
+      .collection("businesses")
+      .doc(input.businessId)
+      .collection("members")
+      .doc(input.uid)
+      .collection("pushTokens")
+      .where("isActive", "==", true)
+      .get();
+
+    const tokenItems = tokenSnapshot.docs
+      .map((tokenDoc) => ({
+        ref: tokenDoc.ref,
+        tokenId: tokenDoc.id,
+        token: String(tokenDoc.data().token ?? "").trim(),
+      }))
+      .filter((tokenItem) => tokenItem.token.length > 0);
+
+    if (tokenItems.length === 0) {
+      return {
+        ok: true,
+        sentCount: 0,
+        failureCount: 0,
+      };
+    }
+
+    let sentCount = 0;
+    let failureCount = 0;
+    const invalidTokenUpdates: Promise<unknown>[] = [];
+
+    for (let startIndex = 0; startIndex < tokenItems.length; startIndex += 500) {
+      const tokenChunk = tokenItems.slice(startIndex, startIndex + 500);
+
+      const response = await getMessaging().sendEachForMulticast({
+        tokens: tokenChunk.map((tokenItem) => tokenItem.token),
+        data: createPushData({
+          title: input.title,
+          body: input.body,
+          tag: input.tag,
+          url: input.url ?? "/",
+          businessId: input.businessId,
+          targetUid: input.uid,
+          ...input.data,
+        }),
+        webpush: {
+          headers: {
+            Urgency: "high",
+          },
+        },
+      });
+
+      sentCount += response.successCount;
+      failureCount += response.failureCount;
+
+      response.responses.forEach((sendResult, resultIndex) => {
+        if (sendResult.success) {
+          return;
+        }
+
+        const tokenItem = tokenChunk[resultIndex];
+        const errorCode = sendResult.error?.code ?? "unknown";
+
+        console.warn("Push notification send failed.", {
+          businessId: input.businessId,
+          uid: input.uid,
+          tokenId: tokenItem?.tokenId ?? "",
+          errorCode,
+        });
+
+        if (tokenItem && isInvalidPushTokenErrorCode(errorCode)) {
+          invalidTokenUpdates.push(
+            tokenItem.ref.set(
+              {
+                isActive: false,
+                disabledAt: FieldValue.serverTimestamp(),
+                updatedAt: FieldValue.serverTimestamp(),
+                lastErrorCode: errorCode,
+              },
+              { merge: true },
+            ),
+          );
+        }
+      });
+    }
+
+    await Promise.all(invalidTokenUpdates);
+
+    return {
+      ok: true,
+      sentCount,
+      failureCount,
+    };
+  } catch (error) {
+    console.error("Push notification could not be sent.", {
+      businessId: input.businessId,
+      uid: input.uid,
+      error,
+    });
+
+    return {
+      ok: false,
+      sentCount: 0,
+      failureCount: 0,
+    };
+  }
+}
+
 export const createBusinessTask = onCall(async (request) => {
   const data = request.data as Record<string, unknown>;
 
@@ -786,6 +927,22 @@ export const createBusinessTask = onCall(async (request) => {
     approvedAt: null,
     approvedByUid: null,
     approvedByName: null,
+  });
+
+  await sendPushNotificationToMember({
+    businessId,
+    uid: assignedToUid,
+    title: "Yeni görev atandı",
+    body: `${assignedByName}: ${title}`,
+    tag: `task-assigned-${taskRef.id}`,
+    url: "/",
+    data: {
+      type: "task_assigned",
+      taskId: taskRef.id,
+      status: "assigned",
+      assignedByName,
+      priority,
+    },
   });
 
   return {
