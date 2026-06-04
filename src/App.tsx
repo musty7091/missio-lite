@@ -11,6 +11,7 @@ import { BossHomePanel } from "./components/boss/BossHomePanel";
 import { ManagerHomePanel } from "./components/manager/ManagerHomePanel";
 import { StaffHomePanel } from "./components/staff/StaffHomePanel";
 import { ActionSheet } from "./components/common/ActionSheet";
+import { SettingsPanel } from "./components/common/SettingsPanel";
 import { ForgotPasswordSheet } from "./components/auth/ForgotPasswordSheet";
 import { SuperAdminPanel } from "./components/superadmin/SuperAdminPanel";
 import {
@@ -356,53 +357,23 @@ function NotificationsTab() {
 function ProfileTab({
   currentUser,
   businessSession,
+  onLogout,
 }: {
   currentUser: User;
   businessSession: BusinessSession;
+  onLogout: () => void;
 }) {
   return (
-    <section className="rounded-[2rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] p-5 shadow-xl shadow-slate-900/5 dark:shadow-black/25">
-      <p className="text-xs font-black uppercase tracking-wide text-[var(--missio-primary)]">
-        Hesabım
-      </p>
-      <h2 className="mt-2 text-2xl font-black tracking-tight text-[var(--missio-text-main)]">
-        Profil
-      </h2>
-
-      <div className="mt-5 grid gap-3">
-        <div className="rounded-2xl bg-[var(--missio-page-bg)] p-4">
-          <span className="text-xs font-black text-[var(--missio-text-muted)]">
-            E-posta
-          </span>
-          <p className="mt-1 break-all text-sm font-black text-[var(--missio-text-main)]">
-            {currentUser.email}
-          </p>
-        </div>
-
-        <div className="rounded-2xl bg-[var(--missio-page-bg)] p-4">
-          <span className="text-xs font-black text-[var(--missio-text-muted)]">
-            İşletme
-          </span>
-          <p className="mt-1 text-sm font-black text-[var(--missio-text-main)]">
-            {businessSession.name}
-          </p>
-          <p className="mt-1 text-xs font-bold text-[var(--missio-text-muted)]">
-            {businessSession.id}
-          </p>
-        </div>
-
-        <div className="rounded-2xl bg-[var(--missio-page-bg)] p-4">
-          <span className="text-xs font-black text-[var(--missio-text-muted)]">
-            Rol
-          </span>
-          <p className="mt-1 text-sm font-black text-[var(--missio-text-main)]">
-            {businessSession.roleLabel}
-          </p>
-        </div>
-      </div>
-    </section>
+    <SettingsPanel
+      currentUser={currentUser}
+      businessId={businessSession.id}
+      businessName={businessSession.name}
+      roleLabel={businessSession.roleLabel}
+      onLogout={onLogout}
+    />
   );
 }
+
 function AuthenticatedPanel({
   currentUser,
   theme,
@@ -415,6 +386,7 @@ function AuthenticatedPanel({
   onLogout: () => void;
 }) {
   const [activeTab, setActiveTab] = useState<AppTab>("tasks");
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [businessSession, setBusinessSession] = useState<BusinessSession | null>(null);
   const [businessLoadError, setBusinessLoadError] = useState("");
   const isSuperAdmin = isSuperAdminUser(currentUser);
@@ -514,6 +486,7 @@ function AuthenticatedPanel({
             roleLabel="Süperadmin"
             onToggleTheme={onToggleTheme}
             onLogout={onLogout}
+            onOpenSettings={() => setSettingsOpen(true)}
           />
 
           <SuperAdminPanel currentUser={currentUser} />
@@ -532,6 +505,7 @@ function AuthenticatedPanel({
             roleLabel="Kullanıcı"
             onToggleTheme={onToggleTheme}
             onLogout={onLogout}
+            onOpenSettings={() => setSettingsOpen(true)}
           />
 
           <section className="mt-6 rounded-[2rem] border border-red-400/30 bg-red-400/10 p-5 text-sm font-black leading-6 text-red-500">
@@ -552,6 +526,7 @@ function AuthenticatedPanel({
             roleLabel="Yükleniyor"
             onToggleTheme={onToggleTheme}
             onLogout={onLogout}
+            onOpenSettings={() => setSettingsOpen(true)}
           />
 
           <section className="mt-6 rounded-[2rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] p-5 text-sm font-black text-[var(--missio-text-muted)]">
@@ -572,6 +547,7 @@ function AuthenticatedPanel({
             roleLabel={businessSession.roleLabel}
             onToggleTheme={onToggleTheme}
             onLogout={onLogout}
+            onOpenSettings={() => setSettingsOpen(true)}
           />
 
           <div className="mb-3 inline-flex w-fit items-center rounded-full border border-[var(--missio-border)] bg-[var(--missio-card-bg)] px-3 py-2 text-xs font-black text-[var(--missio-text-muted)]">
@@ -583,6 +559,20 @@ function AuthenticatedPanel({
             businessName={businessSession.name}
             currentUser={currentUser}
           />
+
+          <ActionSheet
+            title="Ayarlar"
+            isOpen={settingsOpen}
+            onClose={() => setSettingsOpen(false)}
+          >
+            <SettingsPanel
+              currentUser={currentUser}
+              businessId={businessSession.id}
+              businessName={businessSession.name}
+              roleLabel={businessSession.roleLabel}
+              onLogout={onLogout}
+            />
+          </ActionSheet>
         </div>
       </main>
     );
@@ -598,6 +588,7 @@ function AuthenticatedPanel({
             roleLabel={businessSession.roleLabel}
             onToggleTheme={onToggleTheme}
             onLogout={onLogout}
+            onOpenSettings={() => setSettingsOpen(true)}
           />
 
           <div className="mb-3 inline-flex w-fit items-center rounded-full border border-[var(--missio-border)] bg-[var(--missio-card-bg)] px-3 py-2 text-xs font-black text-[var(--missio-text-muted)]">
@@ -609,6 +600,20 @@ function AuthenticatedPanel({
             businessName={businessSession.name}
             currentUser={currentUser}
           />
+
+          <ActionSheet
+            title="Ayarlar"
+            isOpen={settingsOpen}
+            onClose={() => setSettingsOpen(false)}
+          >
+            <SettingsPanel
+              currentUser={currentUser}
+              businessId={businessSession.id}
+              businessName={businessSession.name}
+              roleLabel={businessSession.roleLabel}
+              onLogout={onLogout}
+            />
+          </ActionSheet>
         </div>
       </main>
     );
@@ -646,9 +651,24 @@ function AuthenticatedPanel({
             <ProfileTab
               currentUser={currentUser}
               businessSession={businessSession}
+              onLogout={onLogout}
             />
           ) : null}
         </div>
+
+        <ActionSheet
+          title="Ayarlar"
+          isOpen={settingsOpen}
+          onClose={() => setSettingsOpen(false)}
+        >
+          <SettingsPanel
+            currentUser={currentUser}
+            businessId={businessSession.id}
+            businessName={businessSession.name}
+            roleLabel={businessSession.roleLabel}
+            onLogout={onLogout}
+          />
+        </ActionSheet>
 
         <BottomNavigation
           activeTab={activeTab}

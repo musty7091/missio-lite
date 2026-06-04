@@ -1206,3 +1206,113 @@ export const removeBusinessTaskProofPhoto = onCall(async (request) => {
   };
 });
 
+
+function createPushTokenDocId(token: string) {
+  return Buffer.from(token).toString("base64url").slice(0, 180);
+}
+
+export const registerPushToken = onCall(async (request) => {
+  const data = request.data as Record<string, unknown>;
+
+  const caller = await assertAuthenticated(request.auth);
+
+  const businessId = normalizeBusinessCode(requiredString(data, "businessId", "İşletme kodu"));
+  const token = requiredString(data, "token", "Bildirim token");
+
+  if (token.length < 20 || token.length > 4096) {
+    throw new HttpsError("invalid-argument", "Bildirim token değeri geçersiz.");
+  }
+
+  const businessRef = db.collection("businesses").doc(businessId);
+  const businessSnapshot = await businessRef.get();
+
+  if (!businessSnapshot.exists) {
+    throw new HttpsError("not-found", "İşletme bulunamadı.");
+  }
+
+  const memberRef = businessRef.collection("members").doc(caller.uid);
+  const memberSnapshot = await memberRef.get();
+  const memberData = memberSnapshot.data();
+
+  if (!memberSnapshot.exists || !memberData) {
+    throw new HttpsError("permission-denied", "Bu işletmede bildirim açma yetkiniz yok.");
+  }
+
+  if (memberData.status === "passive" || memberData.isActive === false) {
+    throw new HttpsError("permission-denied", "Pasif kullanıcı bildirim açamaz.");
+  }
+
+  const tokenId = createPushTokenDocId(token);
+  const now = FieldValue.serverTimestamp();
+
+  await memberRef.collection("pushTokens").doc(tokenId).set(
+    {
+      token,
+      tokenId,
+      businessId,
+      uid: caller.uid,
+      email: caller.email ?? "",
+      role: memberData.role ?? "",
+      displayName: memberData.displayName ?? memberData.username ?? "",
+      userAgent: optionalString(data, "userAgent"),
+      platform: optionalString(data, "platform"),
+      language: optionalString(data, "language"),
+      permission: optionalString(data, "permission"),
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    },
+    { merge: true },
+  );
+
+  return {
+    ok: true,
+    businessId,
+    uid: caller.uid,
+    tokenId,
+  };
+});
+
+
+export const unregisterPushToken = onCall(async (request) => {
+  const data = request.data as Record<string, unknown>;
+
+  const caller = await assertAuthenticated(request.auth);
+
+  const businessId = normalizeBusinessCode(requiredString(data, "businessId", "İşletme kodu"));
+  const token = requiredString(data, "token", "Bildirim token");
+
+  const businessRef = db.collection("businesses").doc(businessId);
+  const businessSnapshot = await businessRef.get();
+
+  if (!businessSnapshot.exists) {
+    throw new HttpsError("not-found", "İşletme bulunamadı.");
+  }
+
+  const memberRef = businessRef.collection("members").doc(caller.uid);
+  const memberSnapshot = await memberRef.get();
+
+  if (!memberSnapshot.exists) {
+    throw new HttpsError("permission-denied", "Bu işletmede bildirim kapatma yetkiniz yok.");
+  }
+
+  const tokenId = createPushTokenDocId(token);
+
+  await memberRef.collection("pushTokens").doc(tokenId).set(
+    {
+      isActive: false,
+      disabledAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+      permission: optionalString(data, "permission"),
+    },
+    { merge: true },
+  );
+
+  return {
+    ok: true,
+    businessId,
+    uid: caller.uid,
+    tokenId,
+  };
+});
+

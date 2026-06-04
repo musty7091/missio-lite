@@ -1,0 +1,19 @@
+{
+  "name": "Missio Lite",
+  "short_name": "Missio",
+  "description": "Görev, konum yoklama ve operasyon takip sistemi",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#020617",
+  "theme_color": "#020617",
+  "icons": [
+    {
+      "src": "/pwa-icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

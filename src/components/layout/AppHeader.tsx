@@ -1,4 +1,4 @@
-﻿import { LogOut, Moon, Sun } from "lucide-react";
+import { LogOut, Moon, Settings, Sun } from "lucide-react";
 
 export type ThemeMode = "light" | "dark";
 
@@ -8,6 +8,7 @@ type AppHeaderProps = {
   roleLabel: string;
   onToggleTheme: () => void;
   onLogout: () => void;
+  onOpenSettings?: () => void;
 };
 
 export function MissioMiniLogo() {
@@ -31,6 +32,7 @@ export function AppHeader({
   roleLabel,
   onToggleTheme,
   onLogout,
+  onOpenSettings,
 }: AppHeaderProps) {
   return (
     <header className="mb-5 rounded-[2rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] p-4 shadow-xl shadow-slate-900/5 dark:shadow-black/30">
@@ -56,6 +58,18 @@ export function AppHeader({
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
+          {onOpenSettings ? (
+            <button
+              type="button"
+              onClick={onOpenSettings}
+              className="rounded-2xl border border-[var(--missio-border)] bg-[var(--missio-page-bg)] p-3 text-[var(--missio-text-main)] shadow-sm transition active:scale-95"
+              aria-label="Ayarlar"
+              title="Ayarlar"
+            >
+              <Settings size={19} />
+            </button>
+          ) : null}
+
           <button
             type="button"
             onClick={onToggleTheme}
