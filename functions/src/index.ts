@@ -657,3 +657,144 @@ export const updateBusinessMember = onCall(async (request) => {
   };
 });
 
+
+export const createBusinessTask = onCall(async (request) => {
+  const data = request.data as Record<string, unknown>;
+
+  const caller = await assertAuthenticated(request.auth);
+
+  const businessId = normalizeBusinessCode(requiredString(data, "businessId", "İşletme kodu"));
+  const assignedToUid = requiredString(data, "assignedToUid", "Görev atanacak kullanıcı");
+  const title = requiredString(data, "title", "Görev başlığı");
+  const description = optionalString(data, "description");
+  const taskType = String(data.taskType ?? "Rutin");
+  const priority = String(data.priority ?? "Normal");
+  const requiresPhoto = Boolean(data.requiresPhoto ?? false);
+  const requiresApproval = Boolean(data.requiresApproval ?? true);
+  const referenceImageName = optionalString(data, "referenceImageName");
+  const dueDate = optionalString(data, "dueDate");
+
+  if (!["Rutin", "Ekstra"].includes(taskType)) {
+    throw new HttpsError("invalid-argument", "Görev tipi geçersiz.");
+  }
+
+  if (!["Normal", "Önemli", "Acil", "Kritik"].includes(priority)) {
+    throw new HttpsError("invalid-argument", "Görev önceliği geçersiz.");
+  }
+
+  const businessRef = db.collection("businesses").doc(businessId);
+  const businessSnapshot = await businessRef.get();
+
+  if (!businessSnapshot.exists) {
+    throw new HttpsError("not-found", "İşletme bulunamadı.");
+  }
+
+  const callerIsSuperAdmin = await isSuperAdmin(caller.uid, caller.email);
+  const callerMemberSnapshot = await businessRef.collection("members").doc(caller.uid).get();
+  const callerMemberData = callerMemberSnapshot.data();
+
+  if (!callerIsSuperAdmin) {
+    if (!callerMemberSnapshot.exists || !callerMemberData) {
+      throw new HttpsError("permission-denied", "Bu işletmede görev atama yetkiniz yok.");
+    }
+
+    if (!["owner", "manager"].includes(String(callerMemberData.role ?? ""))) {
+      throw new HttpsError("permission-denied", "Görev atama yetkiniz yok.");
+    }
+
+    if (callerMemberData.status === "passive" || callerMemberData.isActive === false) {
+      throw new HttpsError("permission-denied", "Pasif kullanıcı görev atayamaz.");
+    }
+  }
+
+  const assignedMemberSnapshot = await businessRef
+    .collection("members")
+    .doc(assignedToUid)
+    .get();
+
+  const assignedMemberData = assignedMemberSnapshot.data();
+
+  if (!assignedMemberSnapshot.exists || !assignedMemberData) {
+    throw new HttpsError("not-found", "Görev atanacak kullanıcı bulunamadı.");
+  }
+
+  const assignedRole = String(assignedMemberData.role ?? "");
+
+  if (!["manager", "staff"].includes(assignedRole)) {
+    throw new HttpsError("invalid-argument", "Görev sadece yönetici veya personele atanabilir.");
+  }
+
+  if (assignedMemberData.status === "passive" || assignedMemberData.isActive === false) {
+    throw new HttpsError("failed-precondition", "Pasif kullanıcıya görev atanamaz.");
+  }
+
+  const callerRole = callerIsSuperAdmin
+    ? "super_admin"
+    : String(callerMemberData?.role ?? "");
+
+  if (callerRole === "manager") {
+    if (assignedRole !== "staff" || assignedMemberData.managerUid !== caller.uid) {
+      throw new HttpsError(
+        "permission-denied",
+        "Yönetici sadece kendisine bağlı personele görev atayabilir.",
+      );
+    }
+  }
+
+  const now = FieldValue.serverTimestamp();
+  const taskRef = businessRef.collection("tasks").doc();
+
+  const assignedToName = String(
+    assignedMemberData.displayName ??
+      assignedMemberData.username ??
+      assignedMemberData.email ??
+      "",
+  );
+
+  const assignedByName = callerIsSuperAdmin
+    ? "Süperadmin"
+    : String(
+        callerMemberData?.displayName ??
+          callerMemberData?.username ??
+          caller.email ??
+          "",
+      );
+
+  await taskRef.set({
+    taskId: taskRef.id,
+    businessId,
+    title,
+    description,
+    taskType,
+    priority,
+    status: "assigned",
+    assignedToUid,
+    assignedToName,
+    assignedToRole: assignedRole,
+    assignedToUsername: String(assignedMemberData.username ?? ""),
+    assignedByUid: caller.uid,
+    assignedByName,
+    assignedByRole: callerRole,
+    requiresPhoto,
+    requiresApproval,
+    referenceImageName,
+    dueDate,
+    createdAt: now,
+    updatedAt: now,
+    completedAt: null,
+    approvedAt: null,
+    approvedByUid: null,
+    approvedByName: null,
+  });
+
+  return {
+    ok: true,
+    businessId,
+    taskId: taskRef.id,
+    assignedToUid,
+    assignedToName,
+    title,
+    status: "assigned",
+  };
+});
+
