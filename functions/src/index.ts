@@ -504,3 +504,156 @@ export const createBusinessUser = onCall(async (request) => {
     managerUid: role === "staff" ? managerUid || null : null,
   };
 });
+
+
+export const updateBusinessMember = onCall(async (request) => {
+  const data = request.data as Record<string, unknown>;
+
+  const businessId = normalizeBusinessCode(requiredString(data, "businessId", "İşletme kodu"));
+  const targetUid = requiredString(data, "targetUid", "Kullanıcı UID");
+
+  await assertCanCreateBusinessUser(request.auth, businessId);
+
+  const displayName = requiredString(data, "displayName", "Ad soyad");
+  const phone = optionalString(data, "phone");
+  const role = String(data.role ?? "staff") as BusinessRole;
+  const status = String(data.status ?? "active");
+  const managerUid = optionalString(data, "managerUid");
+
+  if (!["manager", "staff"].includes(role)) {
+    throw new HttpsError("invalid-argument", "Kullanıcı rolü sadece yönetici veya personel olabilir.");
+  }
+
+  if (!["active", "passive"].includes(status)) {
+    throw new HttpsError("invalid-argument", "Kullanıcı durumu geçersiz.");
+  }
+
+  if (role === "staff" && !managerUid) {
+    throw new HttpsError("invalid-argument", "Personel için bağlı yönetici seçilmelidir.");
+  }
+
+  const businessRef = db.collection("businesses").doc(businessId);
+  const businessSnapshot = await businessRef.get();
+
+  if (!businessSnapshot.exists) {
+    throw new HttpsError("not-found", "İşletme bulunamadı.");
+  }
+
+  const memberRef = businessRef.collection("members").doc(targetUid);
+  const memberSnapshot = await memberRef.get();
+  const memberData = memberSnapshot.data();
+
+  if (!memberSnapshot.exists || !memberData) {
+    throw new HttpsError("not-found", "Güncellenecek kullanıcı bulunamadı.");
+  }
+
+  if (memberData.role === "owner") {
+    throw new HttpsError("permission-denied", "Patron hesabı bu ekrandan değiştirilemez.");
+  }
+
+  if (memberData.role === "manager" && (role !== "manager" || status === "passive")) {
+    const assignedStaffSnapshot = await businessRef
+      .collection("members")
+      .where("managerUid", "==", targetUid)
+      .where("status", "==", "active")
+      .limit(1)
+      .get();
+
+    if (!assignedStaffSnapshot.empty) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Bu yöneticinin bağlı aktif personeli var. Önce personelleri başka yöneticiye aktarın.",
+      );
+    }
+  }
+
+  let managerName: string | null = null;
+
+  if (role === "staff") {
+    const managerSnapshot = await businessRef.collection("members").doc(managerUid).get();
+    const managerData = managerSnapshot.data();
+
+    if (!managerSnapshot.exists || managerData?.role !== "manager") {
+      throw new HttpsError("invalid-argument", "Seçilen yönetici bulunamadı.");
+    }
+
+    if (managerData.status === "passive" || managerData.isActive === false) {
+      throw new HttpsError("invalid-argument", "Pasif yöneticiye personel bağlanamaz.");
+    }
+
+    managerName = String(managerData.displayName ?? "");
+  }
+
+  const username = String(memberData.username ?? "").trim();
+  const email = String(memberData.email ?? "").trim();
+  const isActive = status === "active";
+  const now = FieldValue.serverTimestamp();
+
+  const batch = db.batch();
+
+  batch.set(
+    memberRef,
+    {
+      displayName,
+      phone,
+      role,
+      roleLabel: getRoleLabel(role),
+      status,
+      isActive,
+      managerUid: role === "staff" ? managerUid : null,
+      managerName: role === "staff" ? managerName : null,
+      ...getDefaultPermissions(role),
+      updatedAt: now,
+    },
+    { merge: true },
+  );
+
+  batch.set(
+    db.collection("users").doc(targetUid),
+    {
+      displayName,
+      phone,
+      status,
+      updatedAt: now,
+    },
+    { merge: true },
+  );
+
+  if (username) {
+    batch.set(
+      businessRef.collection("usernames").doc(username),
+      {
+        uid: targetUid,
+        email,
+        username,
+        displayName,
+        role,
+        status,
+        managerUid: role === "staff" ? managerUid : null,
+        managerName: role === "staff" ? managerName : null,
+        updatedAt: now,
+      },
+      { merge: true },
+    );
+  }
+
+  await batch.commit();
+
+  await auth.updateUser(targetUid, {
+    displayName,
+    disabled: !isActive,
+  });
+
+  return {
+    ok: true,
+    businessId,
+    uid: targetUid,
+    username,
+    email,
+    role,
+    status,
+    managerUid: role === "staff" ? managerUid : null,
+    managerName: role === "staff" ? managerName : null,
+  };
+});
+
