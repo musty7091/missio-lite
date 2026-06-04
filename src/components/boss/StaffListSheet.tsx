@@ -1,145 +1,356 @@
-﻿import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   BriefcaseBusiness,
   CheckCircle2,
-  Clock,
   Mail,
-  Pencil,
   Phone,
+  RefreshCw,
   Save,
   ShieldCheck,
   ToggleLeft,
+  UserCheck,
   UserRound,
   UsersRound,
   X,
 } from "lucide-react";
+import {
+  listBusinessMembers,
+  updateBusinessMemberForBusiness,
+  type BusinessManagerOption,
+  type BusinessMemberListItem,
+  type BusinessMemberStatus,
+  type CreateBusinessUserRole,
+} from "../../lib/businessUserData";
 
-type StaffRole = "manager" | "staff";
-type StaffStatus = "active" | "passive";
-
-type StaffMember = {
-  id: string;
-  name: string;
-  email: string;
-  phone: string;
-  role: StaffRole;
-  status: StaffStatus;
-  todayTasks: number;
-  completedTasks: number;
+type StaffListSheetProps = {
+  businessId: string;
 };
 
-const initialStaffList: StaffMember[] = [];
+const roleOptions: Array<{
+  value: CreateBusinessUserRole;
+  label: string;
+}> = [
+  {
+    value: "manager",
+    label: "Yönetici",
+  },
+  {
+    value: "staff",
+    label: "Personel",
+  },
+];
 
-function getRoleLabel(role: StaffRole) {
-  if (role === "manager") {
-    return "Yönetici";
+const statusOptions: Array<{
+  value: BusinessMemberStatus;
+  label: string;
+}> = [
+  {
+    value: "active",
+    label: "Aktif",
+  },
+  {
+    value: "passive",
+    label: "Pasif",
+  },
+];
+
+function getStatusLabel(member: BusinessMemberListItem) {
+  if (!member.isActive || member.status === "passive") {
+    return "Pasif";
   }
 
-  return "Personel";
+  return "Aktif";
 }
 
-function getStatusLabel(status: StaffStatus) {
-  if (status === "active") {
-    return "Aktif";
+function getStatusClass(member: BusinessMemberListItem) {
+  if (!member.isActive || member.status === "passive") {
+    return "bg-slate-500/10 text-slate-400";
   }
 
-  return "Pasif";
+  return "bg-emerald-500/10 text-emerald-500";
 }
 
-function getStatusClass(status: StaffStatus) {
-  if (status === "active") {
-    return "bg-emerald-500/10 text-emerald-500";
+function normalizeStatus(member: BusinessMemberListItem): BusinessMemberStatus {
+  if (!member.isActive || member.status === "passive") {
+    return "passive";
   }
 
-  return "bg-slate-500/10 text-slate-400";
+  return "active";
 }
 
-export function StaffListSheet() {
-  const [staffList, setStaffList] = useState<StaffMember[]>(initialStaffList);
-  const [editingStaffId, setEditingStaffId] = useState<string | null>(null);
+function MemberCard({
+  member,
+  onEdit,
+}: {
+  member: BusinessMemberListItem;
+  onEdit: (member: BusinessMemberListItem) => void;
+}) {
+  return (
+    <article className="rounded-[1.5rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] p-4 shadow-sm">
+      <div className="flex items-start gap-3">
+        <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-cyan-500/10 text-[var(--missio-primary)]">
+          {member.role === "manager" ? (
+            <UserCheck size={22} />
+          ) : (
+            <UserRound size={22} />
+          )}
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h4 className="truncate text-sm font-black text-[var(--missio-text-main)]">
+                {member.displayName || member.username || member.email}
+              </h4>
+
+              <p className="mt-1 truncate text-xs font-bold text-[var(--missio-text-muted)]">
+                @{member.username || "kullanici-adi-yok"}
+              </p>
+            </div>
+
+            <span
+              className={[
+                "shrink-0 rounded-full px-2.5 py-1 text-[0.65rem] font-black",
+                getStatusClass(member),
+              ].join(" ")}
+            >
+              {getStatusLabel(member)}
+            </span>
+          </div>
+
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <div className="rounded-2xl bg-[var(--missio-page-bg)] p-3">
+              <BriefcaseBusiness
+                size={17}
+                className="mb-1 text-[var(--missio-primary)]"
+              />
+              <span className="block text-[0.65rem] font-black text-[var(--missio-text-muted)]">
+                Rol
+              </span>
+              <strong className="mt-1 block text-xs font-black text-[var(--missio-text-main)]">
+                {member.roleLabel}
+              </strong>
+            </div>
+
+            <div className="rounded-2xl bg-[var(--missio-page-bg)] p-3">
+              <ShieldCheck
+                size={17}
+                className="mb-1 text-[var(--missio-primary)]"
+              />
+              <span className="block text-[0.65rem] font-black text-[var(--missio-text-muted)]">
+                Bağlı Yönetici
+              </span>
+              <strong className="mt-1 block text-xs font-black text-[var(--missio-text-main)]">
+                {member.role === "staff"
+                  ? member.managerName || "Atanmamış"
+                  : "-"}
+              </strong>
+            </div>
+          </div>
+
+          <div className="mt-3 grid gap-2">
+            {member.email ? (
+              <div className="flex items-center gap-2 rounded-2xl bg-[var(--missio-page-bg)] px-3 py-2 text-xs font-bold text-[var(--missio-text-muted)]">
+                <Mail
+                  size={15}
+                  className="shrink-0 text-[var(--missio-primary)]"
+                />
+                <span className="truncate">{member.email}</span>
+              </div>
+            ) : null}
+
+            {member.phone ? (
+              <div className="flex items-center gap-2 rounded-2xl bg-[var(--missio-page-bg)] px-3 py-2 text-xs font-bold text-[var(--missio-text-muted)]">
+                <Phone
+                  size={15}
+                  className="shrink-0 text-[var(--missio-primary)]"
+                />
+                <span className="truncate">{member.phone}</span>
+              </div>
+            ) : null}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => onEdit(member)}
+            className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl bg-cyan-500/10 px-3 text-xs font-black text-[var(--missio-primary)] active:scale-95"
+          >
+            <ShieldCheck size={16} />
+            Düzenle / Durum Değiştir
+          </button>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+export function StaffListSheet({ businessId }: StaffListSheetProps) {
+  const [members, setMembers] = useState<BusinessMemberListItem[]>([]);
+  const [selectedMember, setSelectedMember] =
+    useState<BusinessMemberListItem | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState("");
 
-  const editingStaff = useMemo(
-    () => staffList.find((staff) => staff.id === editingStaffId) ?? null,
-    [editingStaffId, staffList],
+  const [draftDisplayName, setDraftDisplayName] = useState("");
+  const [draftPhone, setDraftPhone] = useState("");
+  const [draftRole, setDraftRole] = useState<CreateBusinessUserRole>("staff");
+  const [draftStatus, setDraftStatus] =
+    useState<BusinessMemberStatus>("active");
+  const [draftManagerUid, setDraftManagerUid] = useState("");
+
+  const managers = useMemo(
+    () =>
+      members.filter(
+        (member) =>
+          member.role === "manager" &&
+          member.status !== "passive" &&
+          member.isActive !== false,
+      ),
+    [members],
   );
 
-  const [draftName, setDraftName] = useState("");
-  const [draftEmail, setDraftEmail] = useState("");
-  const [draftPhone, setDraftPhone] = useState("");
-  const [draftRole, setDraftRole] = useState<StaffRole>("staff");
-  const [draftStatus, setDraftStatus] = useState<StaffStatus>("active");
+  const managerOptions = useMemo<BusinessManagerOption[]>(() => {
+    return managers
+      .filter((manager) => manager.uid !== selectedMember?.uid)
+      .map((manager) => ({
+        uid: manager.uid,
+        displayName: manager.displayName,
+        email: manager.email,
+        username: manager.username,
+      }));
+  }, [managers, selectedMember?.uid]);
 
-  function startEdit(staff: StaffMember) {
+  const visibleManagers = useMemo(
+    () => members.filter((member) => member.role === "manager"),
+    [members],
+  );
+
+  const staffMembers = useMemo(
+    () => members.filter((member) => member.role === "staff"),
+    [members],
+  );
+
+  async function loadMembers() {
+    try {
+      setIsLoading(true);
+      setMessage("");
+
+      const memberList = await listBusinessMembers(businessId);
+      setMembers(memberList);
+    } catch (error) {
+      console.error(error);
+      setMembers([]);
+      setMessage("Personel listesi veritabanından okunamadı.");
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  function startEdit(member: BusinessMemberListItem) {
+    if (member.role === "owner") {
+      setMessage("Patron hesabı bu ekrandan değiştirilemez.");
+      return;
+    }
+
+    if (member.role !== "manager" && member.role !== "staff") {
+      setMessage("Bu kullanıcı rolü bu ekrandan değiştirilemez.");
+      return;
+    }
+
     setMessage("");
-    setEditingStaffId(staff.id);
-    setDraftName(staff.name);
-    setDraftEmail(staff.email);
-    setDraftPhone(staff.phone);
-    setDraftRole(staff.role);
-    setDraftStatus(staff.status);
+    setSelectedMember(member);
+    setDraftDisplayName(member.displayName);
+    setDraftPhone(member.phone);
+    setDraftRole(member.role);
+    setDraftStatus(normalizeStatus(member));
+    setDraftManagerUid(member.managerUid ?? "");
   }
 
   function cancelEdit() {
-    setEditingStaffId(null);
+    setSelectedMember(null);
+    setMessage("");
   }
 
-  function saveEdit() {
-    if (!editingStaff) {
+  async function saveEdit() {
+    if (!selectedMember) {
       return;
     }
 
-    if (!draftName.trim()) {
-      setMessage("Ad soyad boş bırakılamaz.");
+    setMessage("");
+
+    if (!draftDisplayName.trim()) {
+      setMessage("Ad soyad alanı zorunludur.");
       return;
     }
 
-    if (!draftEmail.trim()) {
-      setMessage("E-posta boş bırakılamaz.");
+    if (draftRole === "staff" && !draftManagerUid.trim()) {
+      setMessage("Personel için bağlı yönetici seçilmelidir.");
       return;
     }
 
-    setStaffList((currentList) =>
-      currentList.map((staff) =>
-        staff.id === editingStaff.id
-          ? {
-              ...staff,
-              name: draftName.trim(),
-              email: draftEmail.trim(),
-              phone: draftPhone.trim(),
-              role: draftRole,
-              status: draftStatus,
-            }
-          : staff,
-      ),
-    );
+    try {
+      setIsSaving(true);
 
-    setEditingStaffId(null);
-    setMessage("Personel bilgileri güncellendi.");
+      await updateBusinessMemberForBusiness({
+        businessId,
+        targetUid: selectedMember.uid,
+        displayName: draftDisplayName,
+        phone: draftPhone,
+        role: draftRole,
+        status: draftStatus,
+        managerUid: draftRole === "staff" ? draftManagerUid : undefined,
+      });
+
+      setSelectedMember(null);
+      await loadMembers();
+      setMessage("Kullanıcı bilgileri güncellendi.");
+    } catch (error) {
+      console.error(error);
+
+      if (error instanceof Error && error.message) {
+        setMessage(error.message);
+        return;
+      }
+
+      setMessage("Kullanıcı güncellenemedi.");
+    } finally {
+      setIsSaving(false);
+    }
   }
 
-  if (editingStaff) {
+  useEffect(() => {
+    void loadMembers();
+  }, [businessId]);
+
+  useEffect(() => {
+    if (draftRole === "manager") {
+      setDraftManagerUid("");
+    }
+  }, [draftRole]);
+
+  if (selectedMember) {
     return (
       <div className="grid gap-4">
         <div className="rounded-[1.6rem] border border-cyan-400/25 bg-cyan-400/10 p-4">
           <div className="flex items-center gap-3">
             <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-[var(--missio-primary)] text-white">
-              <Pencil size={23} />
+              <ShieldCheck size={23} />
             </div>
 
-            <div>
+            <div className="min-w-0 flex-1">
               <h3 className="text-base font-black text-[var(--missio-text-main)]">
-                Personel Düzenle
+                Kullanıcı Düzenle
               </h3>
-              <p className="text-xs font-bold leading-5 text-[var(--missio-text-muted)]">
-                Bilgi, rol ve aktiflik durumunu buradan güncelle.
+              <p className="truncate text-xs font-bold leading-5 text-[var(--missio-text-muted)]">
+                @{selectedMember.username} · {selectedMember.email}
               </p>
             </div>
           </div>
         </div>
 
         {message ? (
-          <div className="rounded-[1.4rem] border border-red-400/30 bg-red-400/10 p-4 text-sm font-black text-red-500">
+          <div className="rounded-[1.4rem] border border-red-400/30 bg-red-400/10 p-4 text-sm font-black leading-6 text-red-500">
             {message}
           </div>
         ) : null}
@@ -161,31 +372,8 @@ export function StaffListSheet() {
           </div>
 
           <input
-            value={draftName}
-            onChange={(event) => setDraftName(event.target.value)}
-            className="h-12 w-full rounded-2xl border border-[var(--missio-border)] bg-[var(--missio-page-bg)] px-4 text-sm font-black text-[var(--missio-text-main)] outline-none"
-          />
-        </section>
-
-        <section className="rounded-[1.5rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] p-4 shadow-sm">
-          <div className="mb-3 flex items-start gap-3">
-            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-cyan-500/10 text-[var(--missio-primary)]">
-              <Mail size={22} />
-            </div>
-
-            <div>
-              <h4 className="text-sm font-black text-[var(--missio-text-main)]">
-                E-posta
-              </h4>
-              <p className="mt-1 text-xs font-bold leading-5 text-[var(--missio-text-muted)]">
-                Kullanıcının giriş hesabı.
-              </p>
-            </div>
-          </div>
-
-          <input
-            value={draftEmail}
-            onChange={(event) => setDraftEmail(event.target.value)}
+            value={draftDisplayName}
+            onChange={(event) => setDraftDisplayName(event.target.value)}
             className="h-12 w-full rounded-2xl border border-[var(--missio-border)] bg-[var(--missio-page-bg)] px-4 text-sm font-black text-[var(--missio-text-main)] outline-none"
           />
         </section>
@@ -201,7 +389,7 @@ export function StaffListSheet() {
                 Telefon
               </h4>
               <p className="mt-1 text-xs font-bold leading-5 text-[var(--missio-text-muted)]">
-                Personel iletişim numarası.
+                İsteğe bağlı iletişim numarası.
               </p>
             </div>
           </div>
@@ -216,47 +404,86 @@ export function StaffListSheet() {
         <section className="rounded-[1.5rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] p-4 shadow-sm">
           <div className="mb-3 flex items-start gap-3">
             <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-cyan-500/10 text-[var(--missio-primary)]">
-              <ShieldCheck size={22} />
+              <BriefcaseBusiness size={22} />
             </div>
 
             <div>
               <h4 className="text-sm font-black text-[var(--missio-text-main)]">
-                Rol Değişikliği
+                Rol
               </h4>
               <p className="mt-1 text-xs font-bold leading-5 text-[var(--missio-text-muted)]">
-                İşletme içindeki yetki seviyesi.
+                Yönetici veya personel olarak güncellenebilir.
               </p>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => setDraftRole("staff")}
-              className={[
-                "min-h-12 rounded-2xl border px-4 text-sm font-black transition active:scale-95",
-                draftRole === "staff"
-                  ? "border-[var(--missio-primary)] bg-[var(--missio-primary)] text-white"
-                  : "border-[var(--missio-border)] bg-[var(--missio-page-bg)] text-[var(--missio-text-main)]",
-              ].join(" ")}
-            >
-              Personel
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setDraftRole("manager")}
-              className={[
-                "min-h-12 rounded-2xl border px-4 text-sm font-black transition active:scale-95",
-                draftRole === "manager"
-                  ? "border-[var(--missio-primary)] bg-[var(--missio-primary)] text-white"
-                  : "border-[var(--missio-border)] bg-[var(--missio-page-bg)] text-[var(--missio-text-main)]",
-              ].join(" ")}
-            >
-              Yönetici
-            </button>
+            {roleOptions.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setDraftRole(option.value)}
+                className={[
+                  "min-h-12 rounded-2xl border px-4 text-sm font-black transition active:scale-95",
+                  draftRole === option.value
+                    ? "border-[var(--missio-primary)] bg-[var(--missio-primary)] text-white"
+                    : "border-[var(--missio-border)] bg-[var(--missio-page-bg)] text-[var(--missio-text-main)]",
+                ].join(" ")}
+              >
+                {option.label}
+              </button>
+            ))}
           </div>
         </section>
+
+        {draftRole === "staff" ? (
+          <section className="rounded-[1.5rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] p-4 shadow-sm">
+            <div className="mb-3 flex items-start gap-3">
+              <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-cyan-500/10 text-[var(--missio-primary)]">
+                <UsersRound size={22} />
+              </div>
+
+              <div>
+                <h4 className="text-sm font-black text-[var(--missio-text-main)]">
+                  Bağlı Yönetici
+                </h4>
+                <p className="mt-1 text-xs font-bold leading-5 text-[var(--missio-text-muted)]">
+                  Personel için bağlı yönetici zorunludur.
+                </p>
+              </div>
+            </div>
+
+            {managerOptions.length === 0 ? (
+              <div className="rounded-2xl border border-amber-400/30 bg-amber-400/10 p-4 text-xs font-black leading-5 text-amber-500">
+                Atanabilecek aktif yönetici bulunamadı.
+              </div>
+            ) : (
+              <div className="grid gap-2">
+                {managerOptions.map((manager) => (
+                  <button
+                    key={manager.uid}
+                    type="button"
+                    onClick={() => setDraftManagerUid(manager.uid)}
+                    className={[
+                      "rounded-2xl border p-4 text-left transition active:scale-95",
+                      draftManagerUid === manager.uid
+                        ? "border-[var(--missio-primary)] bg-cyan-500/10"
+                        : "border-[var(--missio-border)] bg-[var(--missio-page-bg)]",
+                    ].join(" ")}
+                  >
+                    <strong className="block text-sm font-black text-[var(--missio-text-main)]">
+                      {manager.displayName || manager.username || manager.email}
+                    </strong>
+                    <span className="mt-1 block text-xs font-bold text-[var(--missio-text-muted)]">
+                      {manager.username ? `${manager.username} · ` : ""}
+                      {manager.email}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+        ) : null}
 
         <section className="rounded-[1.5rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] p-4 shadow-sm">
           <div className="mb-3 flex items-start gap-3">
@@ -269,37 +496,27 @@ export function StaffListSheet() {
                 Kullanıcı Durumu
               </h4>
               <p className="mt-1 text-xs font-bold leading-5 text-[var(--missio-text-muted)]">
-                Pasif kullanıcılar giriş yapamaz hale getirilecek.
+                Pasif kullanıcıların Firebase Auth hesabı devre dışı bırakılır.
               </p>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => setDraftStatus("active")}
-              className={[
-                "min-h-12 rounded-2xl border px-4 text-sm font-black transition active:scale-95",
-                draftStatus === "active"
-                  ? "border-emerald-500 bg-emerald-500 text-white"
-                  : "border-[var(--missio-border)] bg-[var(--missio-page-bg)] text-[var(--missio-text-main)]",
-              ].join(" ")}
-            >
-              Aktif
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setDraftStatus("passive")}
-              className={[
-                "min-h-12 rounded-2xl border px-4 text-sm font-black transition active:scale-95",
-                draftStatus === "passive"
-                  ? "border-slate-500 bg-slate-500 text-white"
-                  : "border-[var(--missio-border)] bg-[var(--missio-page-bg)] text-[var(--missio-text-main)]",
-              ].join(" ")}
-            >
-              Pasif
-            </button>
+            {statusOptions.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setDraftStatus(option.value)}
+                className={[
+                  "min-h-12 rounded-2xl border px-4 text-sm font-black transition active:scale-95",
+                  draftStatus === option.value
+                    ? "border-[var(--missio-primary)] bg-[var(--missio-primary)] text-white"
+                    : "border-[var(--missio-border)] bg-[var(--missio-page-bg)] text-[var(--missio-text-main)]",
+                ].join(" ")}
+              >
+                {option.label}
+              </button>
+            ))}
           </div>
         </section>
 
@@ -307,7 +524,8 @@ export function StaffListSheet() {
           <button
             type="button"
             onClick={cancelEdit}
-            className="flex min-h-14 items-center justify-center gap-2 rounded-[1.4rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] px-4 py-3 text-sm font-black text-[var(--missio-text-main)] active:scale-95"
+            disabled={isSaving}
+            className="flex min-h-14 items-center justify-center gap-2 rounded-[1.4rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] px-4 py-3 text-sm font-black text-[var(--missio-text-main)] active:scale-95 disabled:opacity-60"
           >
             <X size={18} />
             Vazgeç
@@ -316,10 +534,19 @@ export function StaffListSheet() {
           <button
             type="button"
             onClick={saveEdit}
-            className="flex min-h-14 items-center justify-center gap-2 rounded-[1.4rem] bg-[var(--missio-primary)] px-4 py-3 text-sm font-black text-white shadow-lg shadow-cyan-500/20 active:scale-95"
+            disabled={
+              isSaving || (draftRole === "staff" && managerOptions.length === 0)
+            }
+            className="flex min-h-14 items-center justify-center gap-2 rounded-[1.4rem] bg-[var(--missio-primary)] px-4 py-3 text-sm font-black text-white shadow-lg shadow-cyan-500/20 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <Save size={18} />
-            Kaydet
+            {isSaving ? (
+              "Kaydediliyor..."
+            ) : (
+              <>
+                <Save size={18} />
+                Kaydet
+              </>
+            )}
           </button>
         </div>
       </div>
@@ -334,146 +561,101 @@ export function StaffListSheet() {
             <UsersRound size={23} />
           </div>
 
-          <div>
+          <div className="min-w-0 flex-1">
             <h3 className="text-base font-black text-[var(--missio-text-main)]">
               Personel Yönetimi
             </h3>
             <p className="text-xs font-bold leading-5 text-[var(--missio-text-muted)]">
-              Personel bilgileri, rol değişikliği ve aktiflik durumu.
+              {businessId} işletmesindeki gerçek Firestore member kayıtları.
             </p>
           </div>
+
+          <button
+            type="button"
+            onClick={loadMembers}
+            disabled={isLoading}
+            className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl border border-[var(--missio-border)] bg-[var(--missio-card-bg)] text-[var(--missio-primary)] active:scale-95 disabled:opacity-60"
+            aria-label="Personel listesini yenile"
+          >
+            <RefreshCw size={19} />
+          </button>
         </div>
       </div>
 
       {message ? (
-        <div className="rounded-[1.4rem] border border-cyan-400/30 bg-cyan-400/10 p-4 text-sm font-black text-[var(--missio-primary)]">
+        <div className="rounded-[1.4rem] border border-cyan-400/30 bg-cyan-400/10 p-4 text-sm font-black leading-6 text-[var(--missio-primary)]">
           {message}
         </div>
       ) : null}
 
-      {staffList.length === 0 ? (
-        <div className="rounded-[1.5rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] p-4 text-sm font-bold leading-6 text-[var(--missio-text-muted)]">
-          Henüz personel kaydı yok. Personel kayıtları süperadmin veya patron tarafından oluşturulduğunda burada görünecek.
+      {isLoading ? (
+        <div className="rounded-[1.5rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] p-4 text-sm font-black text-[var(--missio-text-muted)]">
+          Personel listesi veritabanından okunuyor...
         </div>
       ) : null}
 
-      <div className="grid gap-3">
-        {staffList.map((staff) => (
-          <article
-            key={staff.id}
-            className="rounded-[1.5rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] p-4 shadow-sm"
-          >
-            <div className="flex items-start gap-3">
-              <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-cyan-500/10 text-[var(--missio-primary)]">
-                <UserRound size={22} />
-              </div>
+      {!isLoading && members.length === 0 ? (
+        <div className="rounded-[1.5rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] p-4 text-sm font-bold leading-6 text-[var(--missio-text-muted)]">
+          Henüz kullanıcı kaydı yok. Yönetici veya personel oluşturduğunda burada görünecek.
+        </div>
+      ) : null}
 
-              <div className="min-w-0 flex-1">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <h4 className="truncate text-sm font-black text-[var(--missio-text-main)]">
-                      {staff.name}
-                    </h4>
-                    <p className="mt-1 truncate text-xs font-bold text-[var(--missio-text-muted)]">
-                      {staff.email}
-                    </p>
-                    <p className="mt-1 truncate text-xs font-bold text-[var(--missio-text-muted)]">
-                      {staff.phone}
-                    </p>
-                  </div>
-
-                  <span
-                    className={[
-                      "shrink-0 rounded-full px-2.5 py-1 text-[0.65rem] font-black",
-                      getStatusClass(staff.status),
-                    ].join(" ")}
-                  >
-                    {getStatusLabel(staff.status)}
-                  </span>
-                </div>
-
-                <div className="mt-4 grid grid-cols-3 gap-2">
-                  <div className="rounded-2xl bg-[var(--missio-page-bg)] p-3">
-                    <BriefcaseBusiness
-                      size={17}
-                      className="mb-1 text-[var(--missio-primary)]"
-                    />
-                    <span className="block text-[0.65rem] font-black text-[var(--missio-text-muted)]">
-                      Rol
-                    </span>
-                    <strong className="mt-1 block text-xs font-black text-[var(--missio-text-main)]">
-                      {getRoleLabel(staff.role)}
-                    </strong>
-                  </div>
-
-                  <div className="rounded-2xl bg-[var(--missio-page-bg)] p-3">
-                    <Clock
-                      size={17}
-                      className="mb-1 text-[var(--missio-primary)]"
-                    />
-                    <span className="block text-[0.65rem] font-black text-[var(--missio-text-muted)]">
-                      Görev
-                    </span>
-                    <strong className="mt-1 block text-xs font-black text-[var(--missio-text-main)]">
-                      {staff.todayTasks}
-                    </strong>
-                  </div>
-
-                  <div className="rounded-2xl bg-[var(--missio-page-bg)] p-3">
-                    <CheckCircle2
-                      size={17}
-                      className="mb-1 text-[var(--missio-primary)]"
-                    />
-                    <span className="block text-[0.65rem] font-black text-[var(--missio-text-muted)]">
-                      Biten
-                    </span>
-                    <strong className="mt-1 block text-xs font-black text-[var(--missio-text-main)]">
-                      {staff.completedTasks}
-                    </strong>
-                  </div>
-                </div>
-
-                <div className="mt-3 grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => startEdit(staff)}
-                    className="flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-[var(--missio-border)] bg-[var(--missio-page-bg)] px-3 text-xs font-black text-[var(--missio-text-main)] active:scale-95"
-                  >
-                    <Pencil size={16} />
-                    Düzenle
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => startEdit(staff)}
-                    className="flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-cyan-500/10 px-3 text-xs font-black text-[var(--missio-primary)] active:scale-95"
-                  >
-                    <ShieldCheck size={16} />
-                    Rol / Durum
-                  </button>
-                </div>
-              </div>
-            </div>
-          </article>
-        ))}
-      </div>
-
-      <div className="rounded-[1.5rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] p-4">
-        <div className="flex items-center gap-3">
-          <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-cyan-500/10 text-[var(--missio-primary)]">
-            <ShieldCheck size={22} />
+      {!isLoading && visibleManagers.length > 0 ? (
+        <section className="grid gap-3">
+          <div>
+            <p className="text-xs font-black uppercase tracking-wide text-[var(--missio-primary)]">
+              Yöneticiler
+            </p>
+            <h4 className="mt-1 text-lg font-black text-[var(--missio-text-main)]">
+              {visibleManagers.length} yönetici
+            </h4>
           </div>
 
+          {visibleManagers.map((manager) => (
+            <MemberCard key={manager.uid} member={manager} onEdit={startEdit} />
+          ))}
+        </section>
+      ) : null}
+
+      {!isLoading && staffMembers.length > 0 ? (
+        <section className="grid gap-3">
           <div>
-            <h4 className="text-sm font-black text-[var(--missio-text-main)]">
-              Sonraki Adım
-            </h4>
-            <p className="mt-1 text-xs font-bold leading-5 text-[var(--missio-text-muted)]">
-              Bu yönetim ekranı Firestore member kayıtlarına bağlanacak.
+            <p className="text-xs font-black uppercase tracking-wide text-[var(--missio-primary)]">
+              Personeller
             </p>
+            <h4 className="mt-1 text-lg font-black text-[var(--missio-text-main)]">
+              {staffMembers.length} personel
+            </h4>
+          </div>
+
+          {staffMembers.map((staffMember) => (
+            <MemberCard
+              key={staffMember.uid}
+              member={staffMember}
+              onEdit={startEdit}
+            />
+          ))}
+        </section>
+      ) : null}
+
+      {!isLoading && members.length > 0 ? (
+        <div className="rounded-[1.5rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] p-4">
+          <div className="flex items-center gap-3">
+            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-cyan-500/10 text-[var(--missio-primary)]">
+              <CheckCircle2 size={22} />
+            </div>
+
+            <div>
+              <h4 className="text-sm font-black text-[var(--missio-text-main)]">
+                Canlı Veri
+              </h4>
+              <p className="mt-1 text-xs font-bold leading-5 text-[var(--missio-text-muted)]">
+                Bu liste Firestore members kayıtlarından okunuyor. Düzenleme işlemleri Cloud Function üzerinden yapılır.
+              </p>
+            </div>
           </div>
         </div>
-      </div>
+      ) : null}
     </div>
   );
 }

@@ -222,7 +222,7 @@ export function BossHomePanel({
         isOpen={activeSheet === "staff"}
         onClose={closeSheet}
       >
-        <StaffListSheet />
+        <StaffListSheet businessId={businessId} />
       </ActionSheet>
     </div>
   );
