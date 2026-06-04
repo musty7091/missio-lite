@@ -7,7 +7,8 @@ import {
   query,
   type Timestamp,
 } from "firebase/firestore";
-import { firebaseApp, db } from "./firebase";
+import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
+import { firebaseApp, db, storage } from "./firebase";
 import { listBusinessMembers } from "./businessUserData";
 
 const functions = getFunctions(firebaseApp, "europe-west1");
@@ -75,7 +76,49 @@ export type BusinessTaskListItem = {
   requiresApproval: boolean;
   dueDate: string;
   referenceImageName: string;
+  proofPhotoUrl: string;
+  proofPhotoPath: string;
+  proofPhotoName: string;
+  proofPhotoUrls: string[];
+  proofPhotoUploadedAtText: string;
   createdAtText: string;
+};
+
+export type UpdateBusinessTaskStatusInput = {
+  businessId: string;
+  taskId: string;
+  status: BusinessTaskStatus;
+  note?: string;
+};
+
+export type UpdatedBusinessTaskStatusResult = {
+  ok: boolean;
+  businessId: string;
+  taskId: string;
+  status: BusinessTaskStatus;
+};
+
+export type AttachBusinessTaskProofPhotoInput = {
+  businessId: string;
+  taskId: string;
+  file: File;
+};
+
+export type AttachedBusinessTaskProofPhotoResult = {
+  ok: boolean;
+  businessId: string;
+  taskId: string;
+  proofPhotoUrl: string;
+  proofPhotoPath: string;
+  proofPhotoName: string;
+};
+
+type AttachBusinessTaskProofPhotoCallableInput = {
+  businessId: string;
+  taskId: string;
+  proofPhotoUrl: string;
+  proofPhotoPath: string;
+  proofPhotoName: string;
 };
 
 function normalizeTaskType(value: unknown): TaskType {
@@ -120,6 +163,122 @@ function timestampToText(value: unknown) {
   return timestamp.toDate().toLocaleString("tr-TR");
 }
 
+function toStringArray(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((item) => typeof item === "string" && item.trim().length > 0)
+    .map((item) => item.trim());
+}
+
+function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  errorMessage: string,
+): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeoutId = window.setTimeout(() => {
+      reject(new Error(errorMessage));
+    }, timeoutMs);
+
+    promise
+      .then((result) => {
+        window.clearTimeout(timeoutId);
+        resolve(result);
+      })
+      .catch((error) => {
+        window.clearTimeout(timeoutId);
+        reject(error);
+      });
+  });
+}
+
+function createSafeFileName(fileName: string) {
+  const extension = fileName.includes(".")
+    ? fileName.split(".").pop()?.toLowerCase() || "jpg"
+    : "jpg";
+
+  const safeBaseName = fileName
+    .replace(/\.[^/.]+$/, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9-_]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 40);
+
+  return `${Date.now()}-${safeBaseName || "proof"}.${extension}`;
+}
+
+
+async function optimizeImageForUpload(file: File): Promise<File> {
+  const maxLongSide = 1600;
+  const jpegQuality = 0.72;
+
+  if (!file.type.startsWith("image/")) {
+    return file;
+  }
+
+  const imageUrl = URL.createObjectURL(file);
+
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image();
+
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error("Fotoğraf okunamadı."));
+      img.src = imageUrl;
+    });
+
+    const originalWidth = image.naturalWidth || image.width;
+    const originalHeight = image.naturalHeight || image.height;
+
+    if (!originalWidth || !originalHeight) {
+      return file;
+    }
+
+    const longSide = Math.max(originalWidth, originalHeight);
+    const scale = longSide > maxLongSide ? maxLongSide / longSide : 1;
+
+    const targetWidth = Math.max(1, Math.round(originalWidth * scale));
+    const targetHeight = Math.max(1, Math.round(originalHeight * scale));
+
+    const canvas = document.createElement("canvas");
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
+
+    const context = canvas.getContext("2d");
+
+    if (!context) {
+      return file;
+    }
+
+    context.drawImage(image, 0, 0, targetWidth, targetHeight);
+
+    const optimizedBlob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob(resolve, "image/jpeg", jpegQuality);
+    });
+
+    if (!optimizedBlob) {
+      return file;
+    }
+
+    if (optimizedBlob.size >= file.size && file.size <= 1024 * 1024) {
+      return file;
+    }
+
+    const optimizedName = file.name.replace(/\.[^/.]+$/, "") + "-optimized.jpg";
+
+    return new File([optimizedBlob], optimizedName, {
+      type: "image/jpeg",
+      lastModified: Date.now(),
+    });
+  } finally {
+    URL.revokeObjectURL(imageUrl);
+  }
+}
+
 export function getTaskStatusLabel(status: BusinessTaskStatus) {
   if (status === "assigned") return "Atandı";
   if (status === "in_progress") return "Devam Ediyor";
@@ -128,6 +287,10 @@ export function getTaskStatusLabel(status: BusinessTaskStatus) {
   if (status === "rejected") return "Reddedildi";
   if (status === "cancelled") return "İptal";
   return "Atandı";
+}
+
+export function hasTaskProofPhoto(task: BusinessTaskListItem) {
+  return Boolean(task.proofPhotoUrl || task.proofPhotoUrls.length > 0);
 }
 
 export async function listAssignableTaskMembers(
@@ -190,25 +353,15 @@ export async function listBusinessTasks(
       requiresApproval: Boolean(data.requiresApproval ?? false),
       dueDate: String(data.dueDate ?? ""),
       referenceImageName: String(data.referenceImageName ?? ""),
+      proofPhotoUrl: String(data.proofPhotoUrl ?? ""),
+      proofPhotoPath: String(data.proofPhotoPath ?? ""),
+      proofPhotoName: String(data.proofPhotoName ?? ""),
+      proofPhotoUrls: toStringArray(data.proofPhotoUrls),
+      proofPhotoUploadedAtText: timestampToText(data.proofPhotoUploadedAt),
       createdAtText: timestampToText(data.createdAt),
     };
   });
 }
-
-
-export type UpdateBusinessTaskStatusInput = {
-  businessId: string;
-  taskId: string;
-  status: BusinessTaskStatus;
-  note?: string;
-};
-
-export type UpdatedBusinessTaskStatusResult = {
-  ok: boolean;
-  businessId: string;
-  taskId: string;
-  status: BusinessTaskStatus;
-};
 
 export async function updateBusinessTaskStatusForBusiness(
   input: UpdateBusinessTaskStatusInput,
@@ -224,6 +377,61 @@ export async function updateBusinessTaskStatusForBusiness(
     status: input.status,
     note: input.note?.trim() ?? "",
   });
+
+  return response.data;
+}
+
+export async function attachBusinessTaskProofPhotoForBusiness(
+  input: AttachBusinessTaskProofPhotoInput,
+): Promise<AttachedBusinessTaskProofPhotoResult> {
+  const normalizedBusinessId = input.businessId.trim().toLowerCase();
+
+  const optimizedFile = await withTimeout(
+    optimizeImageForUpload(input.file),
+    15000,
+    "Fotoğraf hazırlanırken zaman aşımına uğradı.",
+  );
+
+  const safeFileName = createSafeFileName(optimizedFile.name);
+  const proofPhotoPath = `businesses/${normalizedBusinessId}/tasks/${input.taskId}/proof/${safeFileName}`;
+
+  const fileRef = ref(storage, proofPhotoPath);
+
+  await withTimeout(
+    uploadBytes(fileRef, optimizedFile, {
+      contentType: optimizedFile.type || "image/jpeg",
+      customMetadata: {
+        originalFileName: input.file.name,
+        originalSize: String(input.file.size),
+        optimizedSize: String(optimizedFile.size),
+      },
+    }),
+    30000,
+    "Fotoğraf Firebase Storage alanına yüklenirken zaman aşımına uğradı.",
+  );
+
+  const proofPhotoUrl = await withTimeout(
+    getDownloadURL(fileRef),
+    15000,
+    "Yüklenen fotoğraf bağlantısı alınırken zaman aşımına uğradı.",
+  );
+
+  const callable = httpsCallable<
+    AttachBusinessTaskProofPhotoCallableInput,
+    AttachedBusinessTaskProofPhotoResult
+  >(functions, "attachBusinessTaskProofPhoto");
+
+  const response = await withTimeout(
+    callable({
+      businessId: normalizedBusinessId,
+      taskId: input.taskId,
+      proofPhotoUrl,
+      proofPhotoPath,
+      proofPhotoName: optimizedFile.name,
+    }),
+    15000,
+    "Fotoğraf görev kaydına bağlanırken zaman aşımına uğradı.",
+  );
 
   return response.data;
 }
@@ -244,7 +452,7 @@ export async function createBusinessTaskForBusiness(
     taskType: input.taskType,
     priority: input.priority,
     requiresPhoto: input.requiresPhoto,
-    requiresApproval: input.requiresApproval,
+    requiresApproval: input.requiresPhoto || input.requiresApproval,
     referenceImageName: input.referenceImageName?.trim() ?? "",
     dueDate: input.dueDate?.trim() ?? "",
   });

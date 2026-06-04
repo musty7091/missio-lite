@@ -1,0 +1,58 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isBusinessMember(businessId) {
+      return isSignedIn()
+        && firestore.exists(
+          /databases/(default)/documents/businesses/$(businessId)/members/$(request.auth.uid)
+        )
+        && firestore.get(
+          /databases/(default)/documents/businesses/$(businessId)/members/$(request.auth.uid)
+        ).data.status != "passive"
+        && firestore.get(
+          /databases/(default)/documents/businesses/$(businessId)/members/$(request.auth.uid)
+        ).data.isActive != false;
+    }
+
+    function isSuperAdmin() {
+      return isSignedIn()
+        && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == "super_admin";
+    }
+
+    function isTaskAssignee(businessId, taskId) {
+      return isSignedIn()
+        && firestore.exists(
+          /databases/(default)/documents/businesses/$(businessId)/tasks/$(taskId)
+        )
+        && firestore.get(
+          /databases/(default)/documents/businesses/$(businessId)/tasks/$(taskId)
+        ).data.assignedToUid == request.auth.uid;
+    }
+
+    function isTaskOpenForProof(businessId, taskId) {
+      return firestore.get(
+        /databases/(default)/documents/businesses/$(businessId)/tasks/$(taskId)
+      ).data.status in ["assigned", "in_progress"];
+    }
+
+    match /businesses/{businessId}/tasks/{taskId}/proof/{fileName} {
+      allow read: if isBusinessMember(businessId) || isSuperAdmin();
+
+      allow write: if isBusinessMember(businessId)
+        && isTaskAssignee(businessId, taskId)
+        && isTaskOpenForProof(businessId, taskId)
+        && request.resource.size <= 25 * 1024 * 1024
+        && request.resource.contentType.matches("image/.*");
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

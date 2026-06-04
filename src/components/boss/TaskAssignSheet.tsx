@@ -268,6 +268,28 @@ export function TaskAssignSheet({ businessId, onCreated }: TaskAssignSheetProps)
     setAudioMessage("");
   }
 
+  function handleRequiresPhotoToggle() {
+    setRequiresPhoto((current) => {
+      const nextValue = !current;
+
+      if (nextValue) {
+        setRequiresApproval(true);
+      }
+
+      return nextValue;
+    });
+  }
+
+  function handleRequiresApprovalToggle() {
+    if (requiresPhoto) {
+      setRequiresApproval(true);
+      return;
+    }
+
+    setRequiresApproval((current) => !current);
+  }
+
+
   async function handleSubmit() {
     setMessage("");
 
@@ -292,7 +314,7 @@ export function TaskAssignSheet({ businessId, onCreated }: TaskAssignSheetProps)
         taskType,
         priority,
         requiresPhoto,
-        requiresApproval,
+        requiresApproval: requiresPhoto || requiresApproval,
         referenceImageName,
         dueDate,
       });
@@ -398,6 +420,12 @@ export function TaskAssignSheet({ businessId, onCreated }: TaskAssignSheetProps)
             <RefreshCw size={16} />
             Listeyi Yenile
           </button>
+
+          {requiresPhoto ? (
+            <div className="rounded-2xl border border-amber-400/30 bg-amber-400/10 p-4 text-xs font-black leading-5 text-amber-600">
+              Fotoğraf kanıtı isteyen görevlerde patron/yönetici onayı otomatik zorunludur.
+            </div>
+          ) : null}
         </div>
       </FieldCard>
 
@@ -610,7 +638,7 @@ export function TaskAssignSheet({ businessId, onCreated }: TaskAssignSheetProps)
         <div className="grid gap-2">
           <button
             type="button"
-            onClick={() => setRequiresPhoto((current) => !current)}
+            onClick={handleRequiresPhotoToggle}
             className={[
               "flex min-h-14 items-center justify-between rounded-2xl border p-4 text-left text-sm font-black transition active:scale-95",
               requiresPhoto
@@ -630,12 +658,14 @@ export function TaskAssignSheet({ businessId, onCreated }: TaskAssignSheetProps)
 
           <button
             type="button"
-            onClick={() => setRequiresApproval((current) => !current)}
+            onClick={handleRequiresApprovalToggle}
+            disabled={requiresPhoto}
             className={[
               "flex min-h-14 items-center justify-between rounded-2xl border p-4 text-left text-sm font-black transition active:scale-95",
               requiresApproval
                 ? "border-[var(--missio-primary)] bg-cyan-500/10 text-[var(--missio-text-main)]"
                 : "border-[var(--missio-border)] bg-[var(--missio-page-bg)] text-[var(--missio-text-main)]",
+              requiresPhoto ? "cursor-not-allowed opacity-80" : "",
             ].join(" ")}
           >
             <span className="flex items-center gap-2">

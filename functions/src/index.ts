@@ -958,3 +958,90 @@ export const updateBusinessTaskStatus = onCall(async (request) => {
   };
 });
 
+
+export const attachBusinessTaskProofPhoto = onCall(async (request) => {
+  const data = request.data as Record<string, unknown>;
+
+  const caller = await assertAuthenticated(request.auth);
+
+  const businessId = normalizeBusinessCode(requiredString(data, "businessId", "İşletme kodu"));
+  const taskId = requiredString(data, "taskId", "Görev ID");
+  const proofPhotoUrl = requiredString(data, "proofPhotoUrl", "Fotoğraf bağlantısı");
+  const proofPhotoPath = requiredString(data, "proofPhotoPath", "Fotoğraf yolu");
+  const proofPhotoName = optionalString(data, "proofPhotoName");
+
+  if (!proofPhotoPath.startsWith(`businesses/${businessId}/tasks/${taskId}/proof/`)) {
+    throw new HttpsError("permission-denied", "Fotoğraf yolu bu göreve ait değil.");
+  }
+
+  const businessRef = db.collection("businesses").doc(businessId);
+  const businessSnapshot = await businessRef.get();
+
+  if (!businessSnapshot.exists) {
+    throw new HttpsError("not-found", "İşletme bulunamadı.");
+  }
+
+  const taskRef = businessRef.collection("tasks").doc(taskId);
+  const taskSnapshot = await taskRef.get();
+  const taskData = taskSnapshot.data();
+
+  if (!taskSnapshot.exists || !taskData) {
+    throw new HttpsError("not-found", "Görev bulunamadı.");
+  }
+
+  const assignedToUid = String(taskData.assignedToUid ?? "");
+  const currentStatus = String(taskData.status ?? "assigned");
+
+  if (assignedToUid !== caller.uid) {
+    throw new HttpsError("permission-denied", "Fotoğraf kanıtını sadece görevin atandığı kullanıcı ekleyebilir.");
+  }
+
+  if (!["assigned", "in_progress"].includes(currentStatus)) {
+    throw new HttpsError("failed-precondition", "Bu görev durumunda fotoğraf kanıtı eklenemez.");
+  }
+
+  const callerMemberSnapshot = await businessRef
+    .collection("members")
+    .doc(caller.uid)
+    .get();
+
+  const callerMemberData = callerMemberSnapshot.data();
+
+  if (!callerMemberSnapshot.exists || !callerMemberData) {
+    throw new HttpsError("permission-denied", "Bu işletmede fotoğraf ekleme yetkiniz yok.");
+  }
+
+  if (callerMemberData.status === "passive" || callerMemberData.isActive === false) {
+    throw new HttpsError("permission-denied", "Pasif kullanıcı fotoğraf ekleyemez.");
+  }
+
+  const now = FieldValue.serverTimestamp();
+
+  await taskRef.set(
+    {
+      proofPhotoUrl,
+      proofPhotoPath,
+      proofPhotoName,
+      proofPhotoUrls: FieldValue.arrayUnion(proofPhotoUrl),
+      proofPhotoUploadedAt: now,
+      proofPhotoUploadedByUid: caller.uid,
+      proofPhotoUploadedByName:
+        callerMemberData.displayName ??
+        callerMemberData.username ??
+        caller.email ??
+        "Personel",
+      updatedAt: now,
+    },
+    { merge: true },
+  );
+
+  return {
+    ok: true,
+    businessId,
+    taskId,
+    proofPhotoUrl,
+    proofPhotoPath,
+    proofPhotoName,
+  };
+});
+

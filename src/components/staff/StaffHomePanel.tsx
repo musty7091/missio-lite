@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent, type ReactNode } from "react";
 import type { User } from "firebase/auth";
 import {
   AlertTriangle,
@@ -7,12 +7,16 @@ import {
   CheckCircle2,
   ClipboardCheck,
   FileCheck2,
+  ImagePlus,
   ListChecks,
   RefreshCw,
+  ShieldCheck,
 } from "lucide-react";
 import { ActionSheet } from "../common/ActionSheet";
 import {
+  attachBusinessTaskProofPhotoForBusiness,
   getTaskStatusLabel,
+  hasTaskProofPhoto,
   listBusinessTasks,
   updateBusinessTaskStatusForBusiness,
   type BusinessTaskListItem,
@@ -65,18 +69,9 @@ function isDelayedTask(task: BusinessTaskListItem) {
 }
 
 function getPriorityClass(priority: string) {
-  if (priority === "Kritik") {
-    return "bg-red-500/10 text-red-500";
-  }
-
-  if (priority === "Acil") {
-    return "bg-orange-500/10 text-orange-500";
-  }
-
-  if (priority === "Önemli") {
-    return "bg-amber-500/10 text-amber-500";
-  }
-
+  if (priority === "Kritik") return "bg-red-500/10 text-red-500";
+  if (priority === "Acil") return "bg-orange-500/10 text-orange-500";
+  if (priority === "Önemli") return "bg-amber-500/10 text-amber-500";
   return "bg-cyan-500/10 text-[var(--missio-primary)]";
 }
 
@@ -93,12 +88,7 @@ function SummaryMiniCard({
 }) {
   return (
     <div className="rounded-[1.15rem] bg-white/10 px-3 py-2.5 ring-1 ring-white/10">
-      <p
-        className={[
-          "text-xl font-black leading-none",
-          danger ? "text-red-300" : "text-white",
-        ].join(" ")}
-      >
+      <p className={["text-xl font-black leading-none", danger ? "text-red-300" : "text-white"].join(" ")}>
         {value}
       </p>
       <span className="mt-2 block text-[0.64rem] font-black uppercase tracking-wide text-slate-200">
@@ -182,28 +172,54 @@ function DetailEntryCard({
   );
 }
 
+function DetailRow({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-2xl bg-[var(--missio-page-bg)] p-3">
+      <span className="block text-[0.65rem] font-black uppercase tracking-wide text-[var(--missio-text-muted)]">
+        {label}
+      </span>
+      <strong className="mt-1 block text-xs font-black text-[var(--missio-text-main)]">
+        {value || "-"}
+      </strong>
+    </div>
+  );
+}
+
 function TaskCard({
   task,
   onStart,
   onComplete,
+  onPhotoSelected,
   isUpdating,
+  isUploading,
 }: {
   task: BusinessTaskListItem;
   onStart: (taskId: string) => void;
   onComplete: (taskId: string) => void;
+  onPhotoSelected: (taskId: string, event: ChangeEvent<HTMLInputElement>) => void;
   isUpdating: boolean;
+  isUploading: boolean;
 }) {
+  const hasProof = hasTaskProofPhoto(task);
+  const canComplete = task.status === "in_progress" && (!task.requiresPhoto || hasProof);
+
   return (
-    <article className="rounded-[1.5rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] p-4 shadow-sm">
+    <article className="rounded-[1.6rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] p-4 shadow-sm">
       <div className="flex items-start gap-3">
-        <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-cyan-500/10 text-[var(--missio-primary)]">
-          <ListChecks size={21} />
+        <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-cyan-500/10 text-[var(--missio-primary)]">
+          <ListChecks size={22} />
         </div>
 
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <h4 className="text-sm font-black text-[var(--missio-text-main)]">
+              <h4 className="text-base font-black leading-5 text-[var(--missio-text-main)]">
                 {task.title}
               </h4>
 
@@ -212,58 +228,56 @@ function TaskCard({
               </p>
             </div>
 
-            <span
-              className={[
-                "shrink-0 rounded-full px-2.5 py-1 text-[0.65rem] font-black",
-                getPriorityClass(task.priority),
-              ].join(" ")}
-            >
+            <span className={["shrink-0 rounded-full px-2.5 py-1 text-[0.65rem] font-black", getPriorityClass(task.priority)].join(" ")}>
               {task.priority}
             </span>
           </div>
 
           {task.description ? (
-            <p className="mt-3 text-xs font-bold leading-5 text-[var(--missio-text-muted)]">
-              {task.description}
-            </p>
+            <div className="mt-4 rounded-2xl border border-[var(--missio-border)] bg-[var(--missio-page-bg)] p-4">
+              <span className="block text-[0.65rem] font-black uppercase tracking-wide text-[var(--missio-text-muted)]">
+                Görev Açıklaması
+              </span>
+              <p className="mt-2 text-sm font-bold leading-6 text-[var(--missio-text-main)]">
+                {task.description}
+              </p>
+            </div>
           ) : null}
 
           <div className="mt-3 grid grid-cols-2 gap-2">
-            <div className="rounded-2xl bg-[var(--missio-page-bg)] p-3">
-              <span className="block text-[0.65rem] font-black text-[var(--missio-text-muted)]">
-                Durum
-              </span>
-              <strong className="mt-1 block text-xs font-black text-[var(--missio-text-main)]">
-                {getTaskStatusLabel(task.status)}
-              </strong>
-            </div>
-
-            <div className="rounded-2xl bg-[var(--missio-page-bg)] p-3">
-              <span className="block text-[0.65rem] font-black text-[var(--missio-text-muted)]">
-                Tip
-              </span>
-              <strong className="mt-1 block text-xs font-black text-[var(--missio-text-main)]">
-                {task.taskType}
-              </strong>
-            </div>
+            <DetailRow label="Durum" value={getTaskStatusLabel(task.status)} />
+            <DetailRow label="Tip" value={task.taskType} />
+            <DetailRow label="Son Tarih" value={task.dueDate || "Belirtilmedi"} />
+            <DetailRow label="Kanıt" value={task.requiresPhoto ? (hasProof ? "Fotoğraf eklendi" : "Fotoğraf gerekli") : "Gerekli değil"} />
           </div>
 
-          {task.dueDate ? (
-            <p
-              className={[
-                "mt-3 text-xs font-black",
-                isDelayedTask(task) ? "text-red-500" : "text-[var(--missio-primary)]",
-              ].join(" ")}
-            >
-              Son tarih: {task.dueDate}
-              {isDelayedTask(task) ? " · Gecikmiş" : ""}
-            </p>
+          {task.requiresPhoto ? (
+            <div className="mt-4 rounded-2xl border border-amber-400/30 bg-amber-400/10 p-4">
+              <div className="flex items-start gap-3">
+                <Camera className="mt-0.5 shrink-0 text-amber-600" size={20} />
+                <div>
+                  <strong className="block text-sm font-black text-amber-700">
+                    Fotoğraf kanıtı zorunlu
+                  </strong>
+                  <p className="mt-1 text-xs font-bold leading-5 text-amber-700">
+                    Bu görev fotoğraf eklenmeden tamamlanamaz. Fotoğraf eklendikten sonra tamamlandı yapabilirsin.
+                  </p>
+                </div>
+              </div>
+            </div>
           ) : null}
 
-          {task.requiresPhoto || task.requiresApproval ? (
-            <div className="mt-3 rounded-2xl bg-[var(--missio-page-bg)] p-3 text-xs font-bold leading-5 text-[var(--missio-text-muted)]">
-              {task.requiresPhoto ? "Fotoğraf kanıtı gerekli. " : ""}
-              {task.requiresApproval ? "Tamamlandıktan sonra onay bekler." : ""}
+          {task.proofPhotoUrl ? (
+            <div className="mt-4 overflow-hidden rounded-2xl border border-[var(--missio-border)] bg-[var(--missio-page-bg)]">
+              <img
+                src={task.proofPhotoUrl}
+                alt="Görev fotoğraf kanıtı"
+                className="max-h-64 w-full object-cover"
+              />
+              <div className="p-3 text-xs font-black text-[var(--missio-primary)]">
+                Fotoğraf kanıtı eklendi
+                {task.proofPhotoUploadedAtText ? ` · ${task.proofPhotoUploadedAtText}` : ""}
+              </div>
             </div>
           ) : null}
 
@@ -279,7 +293,37 @@ function TaskCard({
               </button>
             ) : null}
 
-            {task.status === "in_progress" ? (
+            {task.status === "in_progress" && task.requiresPhoto && !hasProof ? (
+              <label className="flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-2xl bg-amber-500 px-4 py-3 text-sm font-black text-white active:scale-[0.99]">
+                <ImagePlus size={19} />
+                {isUploading ? "Fotoğraf yükleniyor..." : "Fotoğraf Ekle"}
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  disabled={isUploading}
+                  onChange={(event) => onPhotoSelected(task.taskId, event)}
+                  className="hidden"
+                />
+              </label>
+            ) : null}
+
+            {task.status === "in_progress" && task.requiresPhoto && hasProof ? (
+              <label className="flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-2xl border border-[var(--missio-border)] bg-[var(--missio-page-bg)] px-4 py-3 text-sm font-black text-[var(--missio-primary)] active:scale-[0.99]">
+                <ImagePlus size={19} />
+                {isUploading ? "Fotoğraf yükleniyor..." : "Fotoğrafı Değiştir"}
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  disabled={isUploading}
+                  onChange={(event) => onPhotoSelected(task.taskId, event)}
+                  className="hidden"
+                />
+              </label>
+            ) : null}
+
+            {task.status === "in_progress" && canComplete ? (
               <button
                 type="button"
                 onClick={() => onComplete(task.taskId)}
@@ -288,6 +332,12 @@ function TaskCard({
               >
                 {isUpdating ? "İşleniyor..." : "Tamamladım"}
               </button>
+            ) : null}
+
+            {task.status === "in_progress" && task.requiresPhoto && !hasProof ? (
+              <div className="rounded-2xl bg-red-500/10 px-4 py-3 text-xs font-black leading-5 text-red-500">
+                Tamamlamak için önce fotoğraf kanıtı eklemelisin.
+              </div>
             ) : null}
 
             {task.status === "completed" ? (
@@ -308,6 +358,13 @@ function TaskCard({
               </div>
             ) : null}
           </div>
+
+          {task.requiresApproval ? (
+            <div className="mt-3 flex items-start gap-2 rounded-2xl bg-cyan-500/10 p-3 text-xs font-bold leading-5 text-[var(--missio-primary)]">
+              <ShieldCheck className="mt-0.5 shrink-0" size={16} />
+              Bu görev tamamlandıktan sonra yönetici/patron onayına düşer.
+            </div>
+          ) : null}
         </div>
       </div>
     </article>
@@ -319,13 +376,17 @@ function TaskList({
   emptyText,
   onStart,
   onComplete,
+  onPhotoSelected,
   updatingTaskId,
+  uploadingTaskId,
 }: {
   tasks: BusinessTaskListItem[];
   emptyText: string;
   onStart: (taskId: string) => void;
   onComplete: (taskId: string) => void;
+  onPhotoSelected: (taskId: string, event: ChangeEvent<HTMLInputElement>) => void;
   updatingTaskId: string;
+  uploadingTaskId: string;
 }) {
   if (tasks.length === 0) {
     return (
@@ -343,7 +404,9 @@ function TaskList({
           task={task}
           onStart={onStart}
           onComplete={onComplete}
+          onPhotoSelected={onPhotoSelected}
           isUpdating={updatingTaskId === task.taskId}
+          isUploading={uploadingTaskId === task.taskId}
         />
       ))}
     </div>
@@ -356,46 +419,23 @@ export function StaffHomePanel({
   currentUser,
 }: StaffHomePanelProps) {
   const [activeSheet, setActiveSheet] = useState<StaffSheet>(null);
-  const [updatingTaskId, setUpdatingTaskId] = useState("");
   const [tasks, setTasks] = useState<BusinessTaskListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [message, setMessage] = useState("");
+  const [updatingTaskId, setUpdatingTaskId] = useState("");
+  const [uploadingTaskId, setUploadingTaskId] = useState("");
 
   const myTasks = useMemo(
     () => tasks.filter((task) => task.assignedToUid === currentUser.uid),
     [tasks, currentUser.uid],
   );
 
-  const openTasks = useMemo(
-    () => myTasks.filter(isOpenTask),
-    [myTasks],
-  );
-
-  const routineTasks = useMemo(
-    () => myTasks.filter((task) => task.taskType === "Rutin"),
-    [myTasks],
-  );
-
-  const extraTasks = useMemo(
-    () => myTasks.filter((task) => task.taskType === "Ekstra"),
-    [myTasks],
-  );
-
-  const pendingApprovalTasks = useMemo(
-    () => myTasks.filter(isPendingApproval),
-    [myTasks],
-  );
-
-  const completedTasks = useMemo(
-    () => myTasks.filter(isCompletedTask),
-    [myTasks],
-  );
-
-  const photoTasks = useMemo(
-    () => myTasks.filter((task) => task.requiresPhoto && isOpenTask(task)),
-    [myTasks],
-  );
-
+  const openTasks = useMemo(() => myTasks.filter(isOpenTask), [myTasks]);
+  const routineTasks = useMemo(() => myTasks.filter((task) => task.taskType === "Rutin"), [myTasks]);
+  const extraTasks = useMemo(() => myTasks.filter((task) => task.taskType === "Ekstra"), [myTasks]);
+  const pendingApprovalTasks = useMemo(() => myTasks.filter(isPendingApproval), [myTasks]);
+  const completedTasks = useMemo(() => myTasks.filter(isCompletedTask), [myTasks]);
+  const photoTasks = useMemo(() => myTasks.filter((task) => task.requiresPhoto && isOpenTask(task)), [myTasks]);
   const priorityTasks = useMemo(
     () =>
       myTasks.filter(
@@ -423,6 +463,10 @@ export function StaffHomePanel({
     }
   }
 
+  useEffect(() => {
+    void loadTasks();
+  }, [businessId, currentUser.uid]);
+
   async function handleTaskStatusChange(
     taskId: string,
     status: "in_progress" | "completed",
@@ -437,18 +481,60 @@ export function StaffHomePanel({
         status,
       });
 
-      setMessage(
-        status === "in_progress"
-          ? "Görev başlatıldı."
-          : "Görev tamamlandı.",
-      );
-
+      setMessage(status === "in_progress" ? "Görev başlatıldı." : "Görev tamamlandı.");
       await loadTasks();
     } catch (error) {
       console.error(error);
       setMessage("Görev durumu güncellenemedi.");
     } finally {
       setUpdatingTaskId("");
+    }
+  }
+
+  async function handlePhotoSelected(
+    taskId: string,
+    event: ChangeEvent<HTMLInputElement>,
+  ) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file) {
+      return;
+    }
+
+    if (!file.type.startsWith("image/")) {
+      setMessage("Sadece fotoğraf dosyası eklenebilir.");
+      return;
+    }
+
+    if (file.size > 25 * 1024 * 1024) {
+      setMessage("Fotoğraf 25 MB üzerinde olamaz.");
+      return;
+    }
+
+    try {
+      setUploadingTaskId(taskId);
+      setMessage("Fotoğraf hazırlanıyor ve optimize ediliyor...");
+
+      await attachBusinessTaskProofPhotoForBusiness({
+        businessId,
+        taskId,
+        file,
+      });
+
+      setMessage("Fotoğraf kanıtı eklendi.");
+      await loadTasks();
+    } catch (error) {
+      console.error(error);
+
+      const errorMessage =
+        error instanceof Error && error.message
+          ? error.message
+          : "Bilinmeyen hata.";
+
+      setMessage(`Fotoğraf yüklenemedi: ${errorMessage}`);
+    } finally {
+      setUploadingTaskId("");
     }
   }
 
@@ -460,9 +546,13 @@ export function StaffHomePanel({
     void handleTaskStatusChange(taskId, "completed");
   }
 
-  useEffect(() => {
-    void loadTasks();
-  }, [businessId, currentUser.uid]);
+  const taskListProps = {
+    onStart: handleTaskStart,
+    onComplete: handleTaskComplete,
+    onPhotoSelected: handlePhotoSelected,
+    updatingTaskId,
+    uploadingTaskId,
+  };
 
   return (
     <div className="grid gap-4">
@@ -494,32 +584,15 @@ export function StaffHomePanel({
         </div>
 
         <div className="mt-4 grid grid-cols-4 gap-2">
-          <SummaryMiniCard
-            label="Açık"
-            value={openTasks.length}
-            note="Görev"
-          />
-          <SummaryMiniCard
-            label="Rutin"
-            value={routineTasks.length}
-            note="İş"
-          />
-          <SummaryMiniCard
-            label="Ekstra"
-            value={extraTasks.length}
-            note="İş"
-          />
-          <SummaryMiniCard
-            label="Risk"
-            value={priorityTasks.length}
-            note="Acil"
-            danger={priorityTasks.length > 0}
-          />
+          <SummaryMiniCard label="Açık" value={openTasks.length} note="Görev" />
+          <SummaryMiniCard label="Rutin" value={routineTasks.length} note="İş" />
+          <SummaryMiniCard label="Ekstra" value={extraTasks.length} note="İş" />
+          <SummaryMiniCard label="Risk" value={priorityTasks.length} note="Acil" danger={priorityTasks.length > 0} />
         </div>
       </section>
 
       {message ? (
-        <div className="rounded-[1.4rem] border border-red-400/30 bg-red-400/10 p-4 text-sm font-black text-red-500">
+        <div className="rounded-[1.4rem] border border-cyan-400/30 bg-cyan-400/10 p-4 text-sm font-black leading-6 text-[var(--missio-primary)]">
           {message}
         </div>
       ) : null}
@@ -541,33 +614,10 @@ export function StaffHomePanel({
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          <QuickActionCard
-            icon={<ClipboardCheck size={22} />}
-            title="Görevlerim"
-            note="Tüm işlerimi gör"
-            onClick={() => setActiveSheet("allTasks")}
-          />
-
-          <QuickActionCard
-            icon={<ListChecks size={22} />}
-            title="Rutin"
-            note="Tekrarlı görevler"
-            onClick={() => setActiveSheet("routineTasks")}
-          />
-
-          <QuickActionCard
-            icon={<FileCheck2 size={22} />}
-            title="Ekstra"
-            note="Ek işler"
-            onClick={() => setActiveSheet("extraTasks")}
-          />
-
-          <QuickActionCard
-            icon={<Bell size={22} />}
-            title="Bildirimler"
-            note="Uyarılar ve notlar"
-            onClick={() => setActiveSheet("notifications")}
-          />
+          <QuickActionCard icon={<ClipboardCheck size={22} />} title="Görevlerim" note="Tüm işlerimi gör" onClick={() => setActiveSheet("allTasks")} />
+          <QuickActionCard icon={<ListChecks size={22} />} title="Rutin" note="Tekrarlı görevler" onClick={() => setActiveSheet("routineTasks")} />
+          <QuickActionCard icon={<FileCheck2 size={22} />} title="Ekstra" note="Ek işler" onClick={() => setActiveSheet("extraTasks")} />
+          <QuickActionCard icon={<Bell size={22} />} title="Bildirimler" note="Uyarılar ve notlar" onClick={() => setActiveSheet("notifications")} />
         </div>
       </section>
 
@@ -581,147 +631,44 @@ export function StaffHomePanel({
           </h3>
         </div>
 
-        <DetailEntryCard
-          icon={<AlertTriangle size={22} />}
-          title="Acil / Geciken"
-          note="Öncelik isteyen işler"
-          value={priorityTasks.length}
-          onClick={() => setActiveSheet("priorityTasks")}
-        />
-
-        <DetailEntryCard
-          icon={<Camera size={22} />}
-          title="Fotoğraf İstenen"
-          note="Kanıt gerektiren işler"
-          value={photoTasks.length}
-          onClick={() => setActiveSheet("photoTasks")}
-        />
-
-        <DetailEntryCard
-          icon={<FileCheck2 size={22} />}
-          title="Onay Bekleyen"
-          note="Tamamlandı, kontrol bekliyor"
-          value={pendingApprovalTasks.length}
-          onClick={() => setActiveSheet("pendingApproval")}
-        />
-
-        <DetailEntryCard
-          icon={<CheckCircle2 size={22} />}
-          title="Tamamlanan"
-          note="Biten veya onaylanan işler"
-          value={completedTasks.length}
-          onClick={() => setActiveSheet("completedTasks")}
-        />
+        <DetailEntryCard icon={<AlertTriangle size={22} />} title="Acil / Geciken" note="Öncelik isteyen işler" value={priorityTasks.length} onClick={() => setActiveSheet("priorityTasks")} />
+        <DetailEntryCard icon={<Camera size={22} />} title="Fotoğraf İstenen" note="Kanıt gerektiren işler" value={photoTasks.length} onClick={() => setActiveSheet("photoTasks")} />
+        <DetailEntryCard icon={<FileCheck2 size={22} />} title="Onay Bekleyen" note="Tamamlandı, kontrol bekliyor" value={pendingApprovalTasks.length} onClick={() => setActiveSheet("pendingApproval")} />
+        <DetailEntryCard icon={<CheckCircle2 size={22} />} title="Tamamlanan" note="Biten veya onaylanan işler" value={completedTasks.length} onClick={() => setActiveSheet("completedTasks")} />
       </section>
 
-      <ActionSheet
-        title="Görevlerim"
-        isOpen={activeSheet === "allTasks"}
-        onClose={() => setActiveSheet(null)}
-      >
-        <TaskList
-          tasks={myTasks}
-          emptyText="Sana atanmış görev bulunmuyor."
-        onStart={handleTaskStart}
-          onComplete={handleTaskComplete}
-          updatingTaskId={updatingTaskId}
-        />
+      <ActionSheet title="Görevlerim" isOpen={activeSheet === "allTasks"} onClose={() => setActiveSheet(null)}>
+        <TaskList tasks={myTasks} emptyText="Sana atanmış görev bulunmuyor." {...taskListProps} />
       </ActionSheet>
 
-      <ActionSheet
-        title="Rutin Görevler"
-        isOpen={activeSheet === "routineTasks"}
-        onClose={() => setActiveSheet(null)}
-      >
-        <TaskList
-          tasks={routineTasks}
-          emptyText="Rutin görevin bulunmuyor."
-        onStart={handleTaskStart}
-          onComplete={handleTaskComplete}
-          updatingTaskId={updatingTaskId}
-        />
+      <ActionSheet title="Rutin Görevler" isOpen={activeSheet === "routineTasks"} onClose={() => setActiveSheet(null)}>
+        <TaskList tasks={routineTasks} emptyText="Rutin görevin bulunmuyor." {...taskListProps} />
       </ActionSheet>
 
-      <ActionSheet
-        title="Ekstra Görevler"
-        isOpen={activeSheet === "extraTasks"}
-        onClose={() => setActiveSheet(null)}
-      >
-        <TaskList
-          tasks={extraTasks}
-          emptyText="Ekstra görevin bulunmuyor."
-        onStart={handleTaskStart}
-          onComplete={handleTaskComplete}
-          updatingTaskId={updatingTaskId}
-        />
+      <ActionSheet title="Ekstra Görevler" isOpen={activeSheet === "extraTasks"} onClose={() => setActiveSheet(null)}>
+        <TaskList tasks={extraTasks} emptyText="Ekstra görevin bulunmuyor." {...taskListProps} />
       </ActionSheet>
 
-      <ActionSheet
-        title="Acil / Geciken İşler"
-        isOpen={activeSheet === "priorityTasks"}
-        onClose={() => setActiveSheet(null)}
-      >
-        <TaskList
-          tasks={priorityTasks}
-          emptyText="Acil veya geciken görevin bulunmuyor."
-        onStart={handleTaskStart}
-          onComplete={handleTaskComplete}
-          updatingTaskId={updatingTaskId}
-        />
+      <ActionSheet title="Acil / Geciken İşler" isOpen={activeSheet === "priorityTasks"} onClose={() => setActiveSheet(null)}>
+        <TaskList tasks={priorityTasks} emptyText="Acil veya geciken görevin bulunmuyor." {...taskListProps} />
       </ActionSheet>
 
-      <ActionSheet
-        title="Fotoğraf İstenen İşler"
-        isOpen={activeSheet === "photoTasks"}
-        onClose={() => setActiveSheet(null)}
-      >
-        <TaskList
-          tasks={photoTasks}
-          emptyText="Fotoğraf kanıtı isteyen açık görevin bulunmuyor."
-        onStart={handleTaskStart}
-          onComplete={handleTaskComplete}
-          updatingTaskId={updatingTaskId}
-        />
+      <ActionSheet title="Fotoğraf İstenen İşler" isOpen={activeSheet === "photoTasks"} onClose={() => setActiveSheet(null)}>
+        <TaskList tasks={photoTasks} emptyText="Fotoğraf kanıtı isteyen açık görevin bulunmuyor." {...taskListProps} />
       </ActionSheet>
 
-      <ActionSheet
-        title="Onay Bekleyen"
-        isOpen={activeSheet === "pendingApproval"}
-        onClose={() => setActiveSheet(null)}
-      >
-        <TaskList
-          tasks={pendingApprovalTasks}
-          emptyText="Onay bekleyen görevin bulunmuyor."
-        onStart={handleTaskStart}
-          onComplete={handleTaskComplete}
-          updatingTaskId={updatingTaskId}
-        />
+      <ActionSheet title="Onay Bekleyen" isOpen={activeSheet === "pendingApproval"} onClose={() => setActiveSheet(null)}>
+        <TaskList tasks={pendingApprovalTasks} emptyText="Onay bekleyen görevin bulunmuyor." {...taskListProps} />
       </ActionSheet>
 
-      <ActionSheet
-        title="Tamamlanan"
-        isOpen={activeSheet === "completedTasks"}
-        onClose={() => setActiveSheet(null)}
-      >
-        <TaskList
-          tasks={completedTasks}
-          emptyText="Tamamlanan görevin bulunmuyor."
-        onStart={handleTaskStart}
-          onComplete={handleTaskComplete}
-          updatingTaskId={updatingTaskId}
-        />
+      <ActionSheet title="Tamamlanan" isOpen={activeSheet === "completedTasks"} onClose={() => setActiveSheet(null)}>
+        <TaskList tasks={completedTasks} emptyText="Tamamlanan görevin bulunmuyor." {...taskListProps} />
       </ActionSheet>
 
-      <ActionSheet
-        title="Bildirimler"
-        isOpen={activeSheet === "notifications"}
-        onClose={() => setActiveSheet(null)}
-      >
-        <div className="grid gap-3">
-          <p className="text-sm font-bold leading-6 text-[var(--missio-text-muted)]">
-            Şimdilik aktif bildirimin yok. Sonraki adımda görev atama, konum isteği ve onay durumları burada gösterilecek.
-          </p>
-        </div>
+      <ActionSheet title="Bildirimler" isOpen={activeSheet === "notifications"} onClose={() => setActiveSheet(null)}>
+        <p className="text-sm font-bold leading-6 text-[var(--missio-text-muted)]">
+          Şimdilik aktif bildirimin yok. Sonraki adımda görev atama, konum isteği ve onay durumları burada gösterilecek.
+        </p>
       </ActionSheet>
     </div>
   );
