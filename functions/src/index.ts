@@ -1,6 +1,7 @@
 import { initializeApp } from "firebase-admin/app";
 import { getAuth, type UserRecord } from "firebase-admin/auth";
 import { FieldValue, getFirestore } from "firebase-admin/firestore";
+import { getStorage } from "firebase-admin/storage";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { setGlobalOptions } from "firebase-functions/v2";
 
@@ -959,6 +960,7 @@ export const updateBusinessTaskStatus = onCall(async (request) => {
 });
 
 
+
 export const attachBusinessTaskProofPhoto = onCall(async (request) => {
   const data = request.data as Record<string, unknown>;
 
@@ -1000,6 +1002,20 @@ export const attachBusinessTaskProofPhoto = onCall(async (request) => {
     throw new HttpsError("failed-precondition", "Bu görev durumunda fotoğraf kanıtı eklenemez.");
   }
 
+  const existingProofPhotos = Array.isArray(taskData.proofPhotos)
+    ? taskData.proofPhotos.filter((item) => item && typeof item === "object")
+    : [];
+
+  const existingProofPhotoUrls = Array.isArray(taskData.proofPhotoUrls)
+    ? taskData.proofPhotoUrls.filter((item) => typeof item === "string" && item.trim().length > 0)
+    : [];
+
+  const existingProofCount = Math.max(existingProofPhotos.length, existingProofPhotoUrls.length);
+
+  if (existingProofCount >= 3) {
+    throw new HttpsError("failed-precondition", "Bir göreve en fazla 3 fotoğraf kanıtı eklenebilir.");
+  }
+
   const callerMemberSnapshot = await businessRef
     .collection("members")
     .doc(caller.uid)
@@ -1016,6 +1032,20 @@ export const attachBusinessTaskProofPhoto = onCall(async (request) => {
   }
 
   const now = FieldValue.serverTimestamp();
+  const uploadedAtIso = new Date().toISOString();
+
+  const proofPhotoItem = {
+    url: proofPhotoUrl,
+    path: proofPhotoPath,
+    name: proofPhotoName,
+    uploadedAtIso,
+    uploadedByUid: caller.uid,
+    uploadedByName:
+      callerMemberData.displayName ??
+      callerMemberData.username ??
+      caller.email ??
+      "Personel",
+  };
 
   await taskRef.set(
     {
@@ -1023,6 +1053,7 @@ export const attachBusinessTaskProofPhoto = onCall(async (request) => {
       proofPhotoPath,
       proofPhotoName,
       proofPhotoUrls: FieldValue.arrayUnion(proofPhotoUrl),
+      proofPhotos: FieldValue.arrayUnion(proofPhotoItem),
       proofPhotoUploadedAt: now,
       proofPhotoUploadedByUid: caller.uid,
       proofPhotoUploadedByName:
@@ -1042,6 +1073,102 @@ export const attachBusinessTaskProofPhoto = onCall(async (request) => {
     proofPhotoUrl,
     proofPhotoPath,
     proofPhotoName,
+    proofPhotoItem,
+  };
+});
+
+
+export const removeBusinessTaskProofPhoto = onCall(async (request) => {
+  const data = request.data as Record<string, unknown>;
+
+  const caller = await assertAuthenticated(request.auth);
+
+  const businessId = normalizeBusinessCode(requiredString(data, "businessId", "İşletme kodu"));
+  const taskId = requiredString(data, "taskId", "Görev ID");
+  const proofPhotoPath = requiredString(data, "proofPhotoPath", "Fotoğraf yolu");
+
+  if (!proofPhotoPath.startsWith(`businesses/${businessId}/tasks/${taskId}/proof/`)) {
+    throw new HttpsError("permission-denied", "Fotoğraf yolu bu göreve ait değil.");
+  }
+
+  const businessRef = db.collection("businesses").doc(businessId);
+  const taskRef = businessRef.collection("tasks").doc(taskId);
+  const taskSnapshot = await taskRef.get();
+  const taskData = taskSnapshot.data();
+
+  if (!taskSnapshot.exists || !taskData) {
+    throw new HttpsError("not-found", "Görev bulunamadı.");
+  }
+
+  const assignedToUid = String(taskData.assignedToUid ?? "");
+  const currentStatus = String(taskData.status ?? "assigned");
+
+  if (assignedToUid !== caller.uid) {
+    throw new HttpsError("permission-denied", "Fotoğraf kanıtını sadece görevin atandığı kullanıcı silebilir.");
+  }
+
+  if (!["assigned", "in_progress"].includes(currentStatus)) {
+    throw new HttpsError("failed-precondition", "Bu görev durumunda fotoğraf kanıtı silinemez.");
+  }
+
+  const callerMemberSnapshot = await businessRef
+    .collection("members")
+    .doc(caller.uid)
+    .get();
+
+  const callerMemberData = callerMemberSnapshot.data();
+
+  if (!callerMemberSnapshot.exists || !callerMemberData) {
+    throw new HttpsError("permission-denied", "Bu işletmede fotoğraf silme yetkiniz yok.");
+  }
+
+  if (callerMemberData.status === "passive" || callerMemberData.isActive === false) {
+    throw new HttpsError("permission-denied", "Pasif kullanıcı fotoğraf silemez.");
+  }
+
+  const proofPhotos = Array.isArray(taskData.proofPhotos)
+    ? taskData.proofPhotos.filter((item) => item && typeof item === "object")
+    : [];
+
+  const remainingProofPhotos = proofPhotos.filter((item) => {
+    const proofItem = item as Record<string, unknown>;
+    return String(proofItem.path ?? "") !== proofPhotoPath;
+  });
+
+  const remainingProofPhotoUrls = remainingProofPhotos
+    .map((item) => {
+      const proofItem = item as Record<string, unknown>;
+      return String(proofItem.url ?? "");
+    })
+    .filter((url) => url.trim().length > 0);
+
+  const latestProofPhoto = remainingProofPhotos.length > 0
+    ? (remainingProofPhotos[remainingProofPhotos.length - 1] as Record<string, unknown>)
+    : null;
+
+  await getStorage()
+    .bucket()
+    .file(proofPhotoPath)
+    .delete({ ignoreNotFound: true });
+
+  await taskRef.set(
+    {
+      proofPhotos: remainingProofPhotos,
+      proofPhotoUrls: remainingProofPhotoUrls,
+      proofPhotoUrl: latestProofPhoto ? String(latestProofPhoto.url ?? "") : "",
+      proofPhotoPath: latestProofPhoto ? String(latestProofPhoto.path ?? "") : "",
+      proofPhotoName: latestProofPhoto ? String(latestProofPhoto.name ?? "") : "",
+      updatedAt: FieldValue.serverTimestamp(),
+    },
+    { merge: true },
+  );
+
+  return {
+    ok: true,
+    businessId,
+    taskId,
+    proofPhotoPath,
+    remainingCount: remainingProofPhotos.length,
   };
 });
 

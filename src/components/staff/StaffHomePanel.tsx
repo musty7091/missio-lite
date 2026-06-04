@@ -6,11 +6,13 @@ import {
   Camera,
   CheckCircle2,
   ClipboardCheck,
+  Eye,
   FileCheck2,
   ImagePlus,
   ListChecks,
   RefreshCw,
   ShieldCheck,
+  Trash2,
 } from "lucide-react";
 import { ActionSheet } from "../common/ActionSheet";
 import {
@@ -18,8 +20,10 @@ import {
   getTaskStatusLabel,
   hasTaskProofPhoto,
   listBusinessTasks,
+  removeBusinessTaskProofPhotoForBusiness,
   updateBusinessTaskStatusForBusiness,
   type BusinessTaskListItem,
+  type ProofPhotoItem,
 } from "../../lib/businessTaskData";
 
 type StaffHomePanelProps = {
@@ -191,22 +195,109 @@ function DetailRow({
   );
 }
 
+function ProofPhotoGallery({
+  task,
+  onPreviewPhoto,
+  onRemovePhoto,
+  removingPhotoPath,
+}: {
+  task: BusinessTaskListItem;
+  onPreviewPhoto: (photo: ProofPhotoItem) => void;
+  onRemovePhoto: (taskId: string, photo: ProofPhotoItem) => void;
+  removingPhotoPath: string;
+}) {
+  const canEditPhotos = task.status === "assigned" || task.status === "in_progress";
+
+  if (task.proofPhotos.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="mt-4 rounded-2xl border border-[var(--missio-border)] bg-[var(--missio-page-bg)] p-3">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <strong className="block text-xs font-black text-[var(--missio-text-main)]">
+            Fotoğraf Kanıtları
+          </strong>
+          <span className="mt-1 block text-[0.65rem] font-bold text-[var(--missio-text-muted)]">
+            {task.proofPhotos.length}/3 fotoğraf eklendi
+          </span>
+        </div>
+
+        <Camera size={18} className="text-[var(--missio-primary)]" />
+      </div>
+
+      <div className="grid grid-cols-3 gap-2">
+        {task.proofPhotos.map((photo, index) => (
+          <div
+            key={`${photo.path}-${index}`}
+            className="relative overflow-hidden rounded-2xl border border-[var(--missio-border)] bg-slate-950"
+          >
+            <button
+              type="button"
+              onClick={() => onPreviewPhoto(photo)}
+              className="block h-24 w-full"
+            >
+              <img
+                src={photo.url}
+                alt={`Görev fotoğraf kanıtı ${index + 1}`}
+                className="h-full w-full object-cover"
+              />
+
+              <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1 bg-black/55 px-2 py-1 text-[0.62rem] font-black text-white">
+                <Eye size={12} />
+                Büyüt
+              </div>
+            </button>
+
+            {canEditPhotos ? (
+              <button
+                type="button"
+                onClick={() => onRemovePhoto(task.taskId, photo)}
+                disabled={removingPhotoPath === photo.path}
+                className="absolute right-1 top-1 grid h-7 w-7 place-items-center rounded-full bg-red-500 text-white shadow-lg disabled:opacity-60"
+                aria-label="Fotoğrafı sil"
+              >
+                <Trash2 size={14} />
+              </button>
+            ) : null}
+          </div>
+        ))}
+      </div>
+
+      {task.proofPhotos.some((photo) => photo.uploadedAtText) ? (
+        <p className="mt-3 text-[0.65rem] font-bold leading-5 text-[var(--missio-text-muted)]">
+          Son yükleme: {task.proofPhotos[task.proofPhotos.length - 1]?.uploadedAtText}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 function TaskCard({
   task,
   onStart,
   onComplete,
   onPhotoSelected,
+  onPreviewPhoto,
+  onRemovePhoto,
   isUpdating,
   isUploading,
+  removingPhotoPath,
 }: {
   task: BusinessTaskListItem;
   onStart: (taskId: string) => void;
   onComplete: (taskId: string) => void;
   onPhotoSelected: (taskId: string, event: ChangeEvent<HTMLInputElement>) => void;
+  onPreviewPhoto: (photo: ProofPhotoItem) => void;
+  onRemovePhoto: (taskId: string, photo: ProofPhotoItem) => void;
   isUpdating: boolean;
   isUploading: boolean;
+  removingPhotoPath: string;
 }) {
   const hasProof = hasTaskProofPhoto(task);
+  const photoCount = task.proofPhotos.length;
+  const canAddPhoto = task.status === "in_progress" && task.requiresPhoto && photoCount < 3;
   const canComplete = task.status === "in_progress" && (!task.requiresPhoto || hasProof);
 
   return (
@@ -248,10 +339,19 @@ function TaskCard({
             <DetailRow label="Durum" value={getTaskStatusLabel(task.status)} />
             <DetailRow label="Tip" value={task.taskType} />
             <DetailRow label="Son Tarih" value={task.dueDate || "Belirtilmedi"} />
-            <DetailRow label="Kanıt" value={task.requiresPhoto ? (hasProof ? "Fotoğraf eklendi" : "Fotoğraf gerekli") : "Gerekli değil"} />
+            <DetailRow
+              label="Kanıt"
+              value={
+                task.requiresPhoto
+                  ? hasProof
+                    ? `${photoCount}/3 fotoğraf`
+                    : "Fotoğraf gerekli"
+                  : "Gerekli değil"
+              }
+            />
           </div>
 
-          {task.requiresPhoto ? (
+          {task.requiresPhoto && !hasProof ? (
             <div className="mt-4 rounded-2xl border border-amber-400/30 bg-amber-400/10 p-4">
               <div className="flex items-start gap-3">
                 <Camera className="mt-0.5 shrink-0 text-amber-600" size={20} />
@@ -260,26 +360,25 @@ function TaskCard({
                     Fotoğraf kanıtı zorunlu
                   </strong>
                   <p className="mt-1 text-xs font-bold leading-5 text-amber-700">
-                    Bu görev fotoğraf eklenmeden tamamlanamaz. Fotoğraf eklendikten sonra tamamlandı yapabilirsin.
+                    Bu görev fotoğraf eklenmeden tamamlanamaz.
                   </p>
                 </div>
               </div>
             </div>
           ) : null}
 
-          {task.proofPhotoUrl ? (
-            <div className="mt-4 overflow-hidden rounded-2xl border border-[var(--missio-border)] bg-[var(--missio-page-bg)]">
-              <img
-                src={task.proofPhotoUrl}
-                alt="Görev fotoğraf kanıtı"
-                className="max-h-64 w-full object-cover"
-              />
-              <div className="p-3 text-xs font-black text-[var(--missio-primary)]">
-                Fotoğraf kanıtı eklendi
-                {task.proofPhotoUploadedAtText ? ` · ${task.proofPhotoUploadedAtText}` : ""}
-              </div>
+          {task.requiresPhoto && hasProof ? (
+            <div className="mt-4 rounded-2xl border border-emerald-400/30 bg-emerald-400/10 p-3 text-xs font-black leading-5 text-emerald-600">
+              Fotoğraf kanıtı eklendi. İstersen 3 fotoğrafa kadar ek kanıt ekleyebilir veya yanlış fotoğrafı silebilirsin.
             </div>
           ) : null}
+
+          <ProofPhotoGallery
+            task={task}
+            onPreviewPhoto={onPreviewPhoto}
+            onRemovePhoto={onRemovePhoto}
+            removingPhotoPath={removingPhotoPath}
+          />
 
           <div className="mt-4 grid gap-2">
             {task.status === "assigned" ? (
@@ -293,10 +392,10 @@ function TaskCard({
               </button>
             ) : null}
 
-            {task.status === "in_progress" && task.requiresPhoto && !hasProof ? (
+            {canAddPhoto ? (
               <label className="flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-2xl bg-amber-500 px-4 py-3 text-sm font-black text-white active:scale-[0.99]">
                 <ImagePlus size={19} />
-                {isUploading ? "Fotoğraf yükleniyor..." : "Fotoğraf Ekle"}
+                {isUploading ? "Fotoğraf yükleniyor..." : photoCount > 0 ? "Fotoğraf Ekle" : "Fotoğraf Ekle"}
                 <input
                   type="file"
                   accept="image/*"
@@ -308,19 +407,10 @@ function TaskCard({
               </label>
             ) : null}
 
-            {task.status === "in_progress" && task.requiresPhoto && hasProof ? (
-              <label className="flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-2xl border border-[var(--missio-border)] bg-[var(--missio-page-bg)] px-4 py-3 text-sm font-black text-[var(--missio-primary)] active:scale-[0.99]">
-                <ImagePlus size={19} />
-                {isUploading ? "Fotoğraf yükleniyor..." : "Fotoğrafı Değiştir"}
-                <input
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  disabled={isUploading}
-                  onChange={(event) => onPhotoSelected(task.taskId, event)}
-                  className="hidden"
-                />
-              </label>
+            {task.status === "in_progress" && task.requiresPhoto && photoCount >= 3 ? (
+              <div className="rounded-2xl bg-slate-500/10 px-4 py-3 text-xs font-black leading-5 text-[var(--missio-text-muted)]">
+                3 fotoğraf sınırına ulaşıldı. Yeni fotoğraf eklemek için önce yanlış olanı silebilirsin.
+              </div>
             ) : null}
 
             {task.status === "in_progress" && canComplete ? (
@@ -377,16 +467,22 @@ function TaskList({
   onStart,
   onComplete,
   onPhotoSelected,
+  onPreviewPhoto,
+  onRemovePhoto,
   updatingTaskId,
   uploadingTaskId,
+  removingPhotoPath,
 }: {
   tasks: BusinessTaskListItem[];
   emptyText: string;
   onStart: (taskId: string) => void;
   onComplete: (taskId: string) => void;
   onPhotoSelected: (taskId: string, event: ChangeEvent<HTMLInputElement>) => void;
+  onPreviewPhoto: (photo: ProofPhotoItem) => void;
+  onRemovePhoto: (taskId: string, photo: ProofPhotoItem) => void;
   updatingTaskId: string;
   uploadingTaskId: string;
+  removingPhotoPath: string;
 }) {
   if (tasks.length === 0) {
     return (
@@ -405,8 +501,11 @@ function TaskList({
           onStart={onStart}
           onComplete={onComplete}
           onPhotoSelected={onPhotoSelected}
+          onPreviewPhoto={onPreviewPhoto}
+          onRemovePhoto={onRemovePhoto}
           isUpdating={updatingTaskId === task.taskId}
           isUploading={uploadingTaskId === task.taskId}
+          removingPhotoPath={removingPhotoPath}
         />
       ))}
     </div>
@@ -419,11 +518,13 @@ export function StaffHomePanel({
   currentUser,
 }: StaffHomePanelProps) {
   const [activeSheet, setActiveSheet] = useState<StaffSheet>(null);
+  const [selectedPhoto, setSelectedPhoto] = useState<ProofPhotoItem | null>(null);
   const [tasks, setTasks] = useState<BusinessTaskListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [updatingTaskId, setUpdatingTaskId] = useState("");
   const [uploadingTaskId, setUploadingTaskId] = useState("");
+  const [removingPhotoPath, setRemovingPhotoPath] = useState("");
 
   const myTasks = useMemo(
     () => tasks.filter((task) => task.assignedToUid === currentUser.uid),
@@ -481,11 +582,21 @@ export function StaffHomePanel({
         status,
       });
 
-      setMessage(status === "in_progress" ? "Görev başlatıldı." : "Görev tamamlandı.");
+      if (status === "completed") {
+        setMessage("Görev tamamlandı. Yönetici/patron onayına gönderildi.");
+        setActiveSheet(null);
+      } else {
+        setMessage("Görev başlatıldı.");
+      }
+
       await loadTasks();
     } catch (error) {
       console.error(error);
-      setMessage("Görev durumu güncellenemedi.");
+
+      const errorMessage =
+        error instanceof Error && error.message ? error.message : "Bilinmeyen hata.";
+
+      setMessage(`Görev durumu güncellenemedi: ${errorMessage}`);
     } finally {
       setUpdatingTaskId("");
     }
@@ -528,13 +639,42 @@ export function StaffHomePanel({
       console.error(error);
 
       const errorMessage =
-        error instanceof Error && error.message
-          ? error.message
-          : "Bilinmeyen hata.";
+        error instanceof Error && error.message ? error.message : "Bilinmeyen hata.";
 
       setMessage(`Fotoğraf yüklenemedi: ${errorMessage}`);
     } finally {
       setUploadingTaskId("");
+    }
+  }
+
+  async function handleRemovePhoto(taskId: string, photo: ProofPhotoItem) {
+    const confirmed = window.confirm("Bu fotoğraf kanıtı silinsin mi?");
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setRemovingPhotoPath(photo.path);
+      setMessage("");
+
+      await removeBusinessTaskProofPhotoForBusiness({
+        businessId,
+        taskId,
+        proofPhotoPath: photo.path,
+      });
+
+      setMessage("Fotoğraf kanıtı silindi.");
+      await loadTasks();
+    } catch (error) {
+      console.error(error);
+
+      const errorMessage =
+        error instanceof Error && error.message ? error.message : "Bilinmeyen hata.";
+
+      setMessage(`Fotoğraf silinemedi: ${errorMessage}`);
+    } finally {
+      setRemovingPhotoPath("");
     }
   }
 
@@ -550,8 +690,11 @@ export function StaffHomePanel({
     onStart: handleTaskStart,
     onComplete: handleTaskComplete,
     onPhotoSelected: handlePhotoSelected,
+    onPreviewPhoto: setSelectedPhoto,
+    onRemovePhoto: handleRemovePhoto,
     updatingTaskId,
     uploadingTaskId,
+    removingPhotoPath,
   };
 
   return (
@@ -669,6 +812,29 @@ export function StaffHomePanel({
         <p className="text-sm font-bold leading-6 text-[var(--missio-text-muted)]">
           Şimdilik aktif bildirimin yok. Sonraki adımda görev atama, konum isteği ve onay durumları burada gösterilecek.
         </p>
+      </ActionSheet>
+
+      <ActionSheet
+        title="Fotoğraf Önizleme"
+        isOpen={Boolean(selectedPhoto)}
+        onClose={() => setSelectedPhoto(null)}
+      >
+        {selectedPhoto ? (
+          <div className="grid gap-3">
+            <div className="overflow-hidden rounded-[1.5rem] border border-[var(--missio-border)] bg-[var(--missio-page-bg)]">
+              <img
+                src={selectedPhoto.url}
+                alt="Fotoğraf önizleme"
+                className="max-h-[70vh] w-full object-contain"
+              />
+            </div>
+
+            <div className="rounded-2xl bg-[var(--missio-page-bg)] p-3 text-xs font-bold leading-5 text-[var(--missio-text-muted)]">
+              {selectedPhoto.name || "Fotoğraf kanıtı"}
+              {selectedPhoto.uploadedAtText ? ` · ${selectedPhoto.uploadedAtText}` : ""}
+            </div>
+          </div>
+        ) : null}
       </ActionSheet>
     </div>
   );

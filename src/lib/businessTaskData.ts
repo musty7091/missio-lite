@@ -57,6 +57,16 @@ export type CreatedBusinessTask = {
   status: string;
 };
 
+export type ProofPhotoItem = {
+  url: string;
+  path: string;
+  name: string;
+  uploadedAtIso: string;
+  uploadedAtText: string;
+  uploadedByUid: string;
+  uploadedByName: string;
+};
+
 export type BusinessTaskListItem = {
   taskId: string;
   businessId: string;
@@ -80,6 +90,7 @@ export type BusinessTaskListItem = {
   proofPhotoPath: string;
   proofPhotoName: string;
   proofPhotoUrls: string[];
+  proofPhotos: ProofPhotoItem[];
   proofPhotoUploadedAtText: string;
   createdAtText: string;
 };
@@ -112,6 +123,21 @@ export type AttachedBusinessTaskProofPhotoResult = {
   proofPhotoPath: string;
   proofPhotoName: string;
 };
+
+export type RemoveBusinessTaskProofPhotoInput = {
+  businessId: string;
+  taskId: string;
+  proofPhotoPath: string;
+};
+
+export type RemovedBusinessTaskProofPhotoResult = {
+  ok: boolean;
+  businessId: string;
+  taskId: string;
+  proofPhotoPath: string;
+  remainingCount: number;
+};
+
 
 type AttachBusinessTaskProofPhotoCallableInput = {
   businessId: string;
@@ -171,6 +197,68 @@ function toStringArray(value: unknown) {
   return value
     .filter((item) => typeof item === "string" && item.trim().length > 0)
     .map((item) => item.trim());
+}
+
+function isoDateToText(value: string) {
+  if (!value) {
+    return "";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return date.toLocaleString("tr-TR");
+}
+
+function toProofPhotoItems(data: Record<string, unknown>): ProofPhotoItem[] {
+  const proofPhotos = Array.isArray(data.proofPhotos)
+    ? data.proofPhotos
+    : [];
+
+  const mappedPhotos = proofPhotos
+    .filter((item) => item && typeof item === "object")
+    .map((item) => {
+      const proofItem = item as Record<string, unknown>;
+      const uploadedAtIso = String(proofItem.uploadedAtIso ?? "");
+
+      return {
+        url: String(proofItem.url ?? ""),
+        path: String(proofItem.path ?? ""),
+        name: String(proofItem.name ?? ""),
+        uploadedAtIso,
+        uploadedAtText: isoDateToText(uploadedAtIso),
+        uploadedByUid: String(proofItem.uploadedByUid ?? ""),
+        uploadedByName: String(proofItem.uploadedByName ?? ""),
+      };
+    })
+    .filter((item) => item.url && item.path);
+
+  if (mappedPhotos.length > 0) {
+    return mappedPhotos;
+  }
+
+  const singleUrl = String(data.proofPhotoUrl ?? "");
+  const singlePath = String(data.proofPhotoPath ?? "");
+  const singleName = String(data.proofPhotoName ?? "");
+
+  if (singleUrl && singlePath) {
+    return [
+      {
+        url: singleUrl,
+        path: singlePath,
+        name: singleName,
+        uploadedAtIso: "",
+        uploadedAtText: timestampToText(data.proofPhotoUploadedAt),
+        uploadedByUid: String(data.proofPhotoUploadedByUid ?? ""),
+        uploadedByName: String(data.proofPhotoUploadedByName ?? ""),
+      },
+    ];
+  }
+
+  return [];
 }
 
 function withTimeout<T>(
@@ -290,7 +378,11 @@ export function getTaskStatusLabel(status: BusinessTaskStatus) {
 }
 
 export function hasTaskProofPhoto(task: BusinessTaskListItem) {
-  return Boolean(task.proofPhotoUrl || task.proofPhotoUrls.length > 0);
+  return Boolean(
+    task.proofPhotos.length > 0 ||
+      task.proofPhotoUrl ||
+      task.proofPhotoUrls.length > 0,
+  );
 }
 
 export async function listAssignableTaskMembers(
@@ -357,6 +449,7 @@ export async function listBusinessTasks(
       proofPhotoPath: String(data.proofPhotoPath ?? ""),
       proofPhotoName: String(data.proofPhotoName ?? ""),
       proofPhotoUrls: toStringArray(data.proofPhotoUrls),
+      proofPhotos: toProofPhotoItems(data),
       proofPhotoUploadedAtText: timestampToText(data.proofPhotoUploadedAt),
       createdAtText: timestampToText(data.createdAt),
     };
@@ -432,6 +525,23 @@ export async function attachBusinessTaskProofPhotoForBusiness(
     15000,
     "Fotoğraf görev kaydına bağlanırken zaman aşımına uğradı.",
   );
+
+  return response.data;
+}
+
+export async function removeBusinessTaskProofPhotoForBusiness(
+  input: RemoveBusinessTaskProofPhotoInput,
+): Promise<RemovedBusinessTaskProofPhotoResult> {
+  const callable = httpsCallable<
+    RemoveBusinessTaskProofPhotoInput,
+    RemovedBusinessTaskProofPhotoResult
+  >(functions, "removeBusinessTaskProofPhoto");
+
+  const response = await callable({
+    businessId: input.businessId.trim().toLowerCase(),
+    taskId: input.taskId,
+    proofPhotoPath: input.proofPhotoPath,
+  });
 
   return response.data;
 }
