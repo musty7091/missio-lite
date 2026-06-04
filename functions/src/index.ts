@@ -670,7 +670,7 @@ export const createBusinessTask = onCall(async (request) => {
   const taskType = String(data.taskType ?? "Rutin");
   const priority = String(data.priority ?? "Normal");
   const requiresPhoto = Boolean(data.requiresPhoto ?? false);
-  const requiresApproval = Boolean(data.requiresApproval ?? true);
+  const requiresApproval = requiresPhoto || Boolean(data.requiresApproval ?? true);
   const referenceImageName = optionalString(data, "referenceImageName");
   const dueDate = optionalString(data, "dueDate");
 
@@ -795,6 +795,166 @@ export const createBusinessTask = onCall(async (request) => {
     assignedToName,
     title,
     status: "assigned",
+  };
+});
+
+
+export const updateBusinessTaskStatus = onCall(async (request) => {
+  const data = request.data as Record<string, unknown>;
+
+  const caller = await assertAuthenticated(request.auth);
+
+  const businessId = normalizeBusinessCode(requiredString(data, "businessId", "İşletme kodu"));
+  const taskId = requiredString(data, "taskId", "Görev ID");
+  const nextStatus = String(data.status ?? "");
+  const note = optionalString(data, "note");
+
+  if (!["in_progress", "completed", "approved", "rejected", "cancelled"].includes(nextStatus)) {
+    throw new HttpsError("invalid-argument", "Geçersiz görev durumu.");
+  }
+
+  const businessRef = db.collection("businesses").doc(businessId);
+  const businessSnapshot = await businessRef.get();
+
+  if (!businessSnapshot.exists) {
+    throw new HttpsError("not-found", "İşletme bulunamadı.");
+  }
+
+  const taskRef = businessRef.collection("tasks").doc(taskId);
+  const taskSnapshot = await taskRef.get();
+  const taskData = taskSnapshot.data();
+
+  if (!taskSnapshot.exists || !taskData) {
+    throw new HttpsError("not-found", "Görev bulunamadı.");
+  }
+
+  const callerIsSuperAdmin = await isSuperAdmin(caller.uid, caller.email);
+
+  const callerMemberSnapshot = await businessRef
+    .collection("members")
+    .doc(caller.uid)
+    .get();
+
+  const callerMemberData = callerMemberSnapshot.data();
+
+  if (!callerIsSuperAdmin) {
+    if (!callerMemberSnapshot.exists || !callerMemberData) {
+      throw new HttpsError("permission-denied", "Bu işletmede görev güncelleme yetkiniz yok.");
+    }
+
+    if (callerMemberData.status === "passive" || callerMemberData.isActive === false) {
+      throw new HttpsError("permission-denied", "Pasif kullanıcı görev güncelleyemez.");
+    }
+  }
+
+  const callerRole = callerIsSuperAdmin
+    ? "super_admin"
+    : String(callerMemberData?.role ?? "");
+
+  const assignedToUid = String(taskData.assignedToUid ?? "");
+  const currentStatus = String(taskData.status ?? "assigned");
+  const requiresPhoto = taskData.requiresPhoto === true;
+  const proofPhotoUrl = String(taskData.proofPhotoUrl ?? "");
+  const proofPhotoUrls = Array.isArray(taskData.proofPhotoUrls)
+    ? taskData.proofPhotoUrls.filter((item) => typeof item === "string" && item.trim().length > 0)
+    : [];
+
+  if (nextStatus === "completed" && requiresPhoto && !proofPhotoUrl && proofPhotoUrls.length === 0) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Bu görev için fotoğraf kanıtı eklenmeden tamamlandı yapılamaz.",
+    );
+  }
+
+  if (callerRole === "staff") {
+    if (assignedToUid !== caller.uid) {
+      throw new HttpsError("permission-denied", "Personel sadece kendi görevini güncelleyebilir.");
+    }
+
+    if (!["in_progress", "completed"].includes(nextStatus)) {
+      throw new HttpsError("permission-denied", "Personel bu görev durumunu veremez.");
+    }
+  }
+
+  if (callerRole === "manager") {
+    const assignedMemberSnapshot = await businessRef
+      .collection("members")
+      .doc(assignedToUid)
+      .get();
+
+    const assignedMemberData = assignedMemberSnapshot.data();
+
+    const isOwnTask = assignedToUid === caller.uid;
+    const isOwnStaffTask =
+      assignedMemberSnapshot.exists &&
+      assignedMemberData?.role === "staff" &&
+      assignedMemberData?.managerUid === caller.uid;
+
+    if (!isOwnTask && !isOwnStaffTask) {
+      throw new HttpsError(
+        "permission-denied",
+        "Yönetici sadece kendi görevlerini veya kendi personelinin görevlerini güncelleyebilir.",
+      );
+    }
+  }
+
+  if (callerRole === "staff" && currentStatus === "completed") {
+    throw new HttpsError("failed-precondition", "Tamamlanmış görev personel tarafından tekrar değiştirilemez.");
+  }
+
+  const now = FieldValue.serverTimestamp();
+
+  const updatePayload: Record<string, unknown> = {
+    status: nextStatus,
+    updatedAt: now,
+    lastStatusChangedByUid: caller.uid,
+    lastStatusChangedByName:
+      callerMemberData?.displayName ??
+      callerMemberData?.username ??
+      caller.email ??
+      "Sistem",
+    lastStatusNote: note,
+  };
+
+  if (nextStatus === "in_progress") {
+    updatePayload.startedAt = now;
+  }
+
+  if (nextStatus === "completed") {
+    updatePayload.completedAt = now;
+
+    if (requiresPhoto) {
+      updatePayload.requiresApproval = true;
+    }
+  }
+
+  if (nextStatus === "approved") {
+    updatePayload.approvedAt = now;
+    updatePayload.approvedByUid = caller.uid;
+    updatePayload.approvedByName =
+      callerMemberData?.displayName ??
+      callerMemberData?.username ??
+      caller.email ??
+      "Sistem";
+  }
+
+  if (nextStatus === "rejected") {
+    updatePayload.rejectedAt = now;
+    updatePayload.rejectedByUid = caller.uid;
+    updatePayload.rejectedByName =
+      callerMemberData?.displayName ??
+      callerMemberData?.username ??
+      caller.email ??
+      "Sistem";
+  }
+
+  await taskRef.set(updatePayload, { merge: true });
+
+  return {
+    ok: true,
+    businessId,
+    taskId,
+    status: nextStatus,
   };
 });
 

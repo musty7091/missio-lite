@@ -14,6 +14,7 @@ import { ActionSheet } from "../common/ActionSheet";
 import {
   getTaskStatusLabel,
   listBusinessTasks,
+  updateBusinessTaskStatusForBusiness,
   type BusinessTaskListItem,
 } from "../../lib/businessTaskData";
 
@@ -181,7 +182,17 @@ function DetailEntryCard({
   );
 }
 
-function TaskCard({ task }: { task: BusinessTaskListItem }) {
+function TaskCard({
+  task,
+  onStart,
+  onComplete,
+  isUpdating,
+}: {
+  task: BusinessTaskListItem;
+  onStart: (taskId: string) => void;
+  onComplete: (taskId: string) => void;
+  isUpdating: boolean;
+}) {
   return (
     <article className="rounded-[1.5rem] border border-[var(--missio-border)] bg-[var(--missio-card-bg)] p-4 shadow-sm">
       <div className="flex items-start gap-3">
@@ -255,6 +266,48 @@ function TaskCard({ task }: { task: BusinessTaskListItem }) {
               {task.requiresApproval ? "Tamamlandıktan sonra onay bekler." : ""}
             </div>
           ) : null}
+
+          <div className="mt-4 grid gap-2">
+            {task.status === "assigned" ? (
+              <button
+                type="button"
+                onClick={() => onStart(task.taskId)}
+                disabled={isUpdating}
+                className="rounded-2xl bg-[var(--missio-primary)] px-4 py-3 text-sm font-black text-white active:scale-[0.99] disabled:opacity-60"
+              >
+                {isUpdating ? "İşleniyor..." : "Göreve Başladım"}
+              </button>
+            ) : null}
+
+            {task.status === "in_progress" ? (
+              <button
+                type="button"
+                onClick={() => onComplete(task.taskId)}
+                disabled={isUpdating}
+                className="rounded-2xl bg-emerald-500 px-4 py-3 text-sm font-black text-white active:scale-[0.99] disabled:opacity-60"
+              >
+                {isUpdating ? "İşleniyor..." : "Tamamladım"}
+              </button>
+            ) : null}
+
+            {task.status === "completed" ? (
+              <div className="rounded-2xl bg-amber-500/10 px-4 py-3 text-sm font-black text-amber-600">
+                Görev tamamlandı. Onay bekliyor.
+              </div>
+            ) : null}
+
+            {task.status === "approved" ? (
+              <div className="rounded-2xl bg-emerald-500/10 px-4 py-3 text-sm font-black text-emerald-600">
+                Görev onaylandı.
+              </div>
+            ) : null}
+
+            {task.status === "rejected" ? (
+              <div className="rounded-2xl bg-red-500/10 px-4 py-3 text-sm font-black text-red-500">
+                Görev reddedildi.
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
     </article>
@@ -264,9 +317,15 @@ function TaskCard({ task }: { task: BusinessTaskListItem }) {
 function TaskList({
   tasks,
   emptyText,
+  onStart,
+  onComplete,
+  updatingTaskId,
 }: {
   tasks: BusinessTaskListItem[];
   emptyText: string;
+  onStart: (taskId: string) => void;
+  onComplete: (taskId: string) => void;
+  updatingTaskId: string;
 }) {
   if (tasks.length === 0) {
     return (
@@ -279,7 +338,13 @@ function TaskList({
   return (
     <div className="grid gap-3">
       {tasks.map((task) => (
-        <TaskCard key={task.taskId} task={task} />
+        <TaskCard
+          key={task.taskId}
+          task={task}
+          onStart={onStart}
+          onComplete={onComplete}
+          isUpdating={updatingTaskId === task.taskId}
+        />
       ))}
     </div>
   );
@@ -291,6 +356,7 @@ export function StaffHomePanel({
   currentUser,
 }: StaffHomePanelProps) {
   const [activeSheet, setActiveSheet] = useState<StaffSheet>(null);
+  const [updatingTaskId, setUpdatingTaskId] = useState("");
   const [tasks, setTasks] = useState<BusinessTaskListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [message, setMessage] = useState("");
@@ -355,6 +421,43 @@ export function StaffHomePanel({
     } finally {
       setIsLoading(false);
     }
+  }
+
+  async function handleTaskStatusChange(
+    taskId: string,
+    status: "in_progress" | "completed",
+  ) {
+    try {
+      setUpdatingTaskId(taskId);
+      setMessage("");
+
+      await updateBusinessTaskStatusForBusiness({
+        businessId,
+        taskId,
+        status,
+      });
+
+      setMessage(
+        status === "in_progress"
+          ? "Görev başlatıldı."
+          : "Görev tamamlandı.",
+      );
+
+      await loadTasks();
+    } catch (error) {
+      console.error(error);
+      setMessage("Görev durumu güncellenemedi.");
+    } finally {
+      setUpdatingTaskId("");
+    }
+  }
+
+  function handleTaskStart(taskId: string) {
+    void handleTaskStatusChange(taskId, "in_progress");
+  }
+
+  function handleTaskComplete(taskId: string) {
+    void handleTaskStatusChange(taskId, "completed");
   }
 
   useEffect(() => {
@@ -519,6 +622,9 @@ export function StaffHomePanel({
         <TaskList
           tasks={myTasks}
           emptyText="Sana atanmış görev bulunmuyor."
+        onStart={handleTaskStart}
+          onComplete={handleTaskComplete}
+          updatingTaskId={updatingTaskId}
         />
       </ActionSheet>
 
@@ -530,6 +636,9 @@ export function StaffHomePanel({
         <TaskList
           tasks={routineTasks}
           emptyText="Rutin görevin bulunmuyor."
+        onStart={handleTaskStart}
+          onComplete={handleTaskComplete}
+          updatingTaskId={updatingTaskId}
         />
       </ActionSheet>
 
@@ -541,6 +650,9 @@ export function StaffHomePanel({
         <TaskList
           tasks={extraTasks}
           emptyText="Ekstra görevin bulunmuyor."
+        onStart={handleTaskStart}
+          onComplete={handleTaskComplete}
+          updatingTaskId={updatingTaskId}
         />
       </ActionSheet>
 
@@ -552,6 +664,9 @@ export function StaffHomePanel({
         <TaskList
           tasks={priorityTasks}
           emptyText="Acil veya geciken görevin bulunmuyor."
+        onStart={handleTaskStart}
+          onComplete={handleTaskComplete}
+          updatingTaskId={updatingTaskId}
         />
       </ActionSheet>
 
@@ -563,6 +678,9 @@ export function StaffHomePanel({
         <TaskList
           tasks={photoTasks}
           emptyText="Fotoğraf kanıtı isteyen açık görevin bulunmuyor."
+        onStart={handleTaskStart}
+          onComplete={handleTaskComplete}
+          updatingTaskId={updatingTaskId}
         />
       </ActionSheet>
 
@@ -574,6 +692,9 @@ export function StaffHomePanel({
         <TaskList
           tasks={pendingApprovalTasks}
           emptyText="Onay bekleyen görevin bulunmuyor."
+        onStart={handleTaskStart}
+          onComplete={handleTaskComplete}
+          updatingTaskId={updatingTaskId}
         />
       </ActionSheet>
 
@@ -585,6 +706,9 @@ export function StaffHomePanel({
         <TaskList
           tasks={completedTasks}
           emptyText="Tamamlanan görevin bulunmuyor."
+        onStart={handleTaskStart}
+          onComplete={handleTaskComplete}
+          updatingTaskId={updatingTaskId}
         />
       </ActionSheet>
 

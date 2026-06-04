@@ -195,6 +195,39 @@ export async function listBusinessTasks(
   });
 }
 
+
+export type UpdateBusinessTaskStatusInput = {
+  businessId: string;
+  taskId: string;
+  status: BusinessTaskStatus;
+  note?: string;
+};
+
+export type UpdatedBusinessTaskStatusResult = {
+  ok: boolean;
+  businessId: string;
+  taskId: string;
+  status: BusinessTaskStatus;
+};
+
+export async function updateBusinessTaskStatusForBusiness(
+  input: UpdateBusinessTaskStatusInput,
+): Promise<UpdatedBusinessTaskStatusResult> {
+  const callable = httpsCallable<
+    UpdateBusinessTaskStatusInput,
+    UpdatedBusinessTaskStatusResult
+  >(functions, "updateBusinessTaskStatus");
+
+  const response = await callable({
+    businessId: input.businessId.trim().toLowerCase(),
+    taskId: input.taskId,
+    status: input.status,
+    note: input.note?.trim() ?? "",
+  });
+
+  return response.data;
+}
+
 export async function createBusinessTaskForBusiness(
   input: CreateBusinessTaskInput,
 ): Promise<CreatedBusinessTask> {
