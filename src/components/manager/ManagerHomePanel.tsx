@@ -287,6 +287,8 @@ function TaskCard({
   currentUserUid,
   onStart,
   onComplete,
+  onApprove,
+  onReject,
   onPhotoSelected,
   onPreviewPhoto,
   onRemovePhoto,
@@ -298,6 +300,8 @@ function TaskCard({
   currentUserUid: string;
   onStart: (taskId: string) => void;
   onComplete: (taskId: string) => void;
+  onApprove: (taskId: string) => void;
+  onReject: (taskId: string) => void;
   onPhotoSelected: (taskId: string, event: ChangeEvent<HTMLInputElement>) => void;
   onPreviewPhoto: (photo: ProofPhotoItem) => void;
   onRemovePhoto: (taskId: string, photo: ProofPhotoItem) => void;
@@ -468,6 +472,28 @@ function TaskCard({
               </div>
             ) : null}
 
+            {!isMyTask && task.status === "completed" && task.requiresApproval ? (
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => onApprove(task.taskId)}
+                  disabled={isUpdating}
+                  className="rounded-2xl bg-emerald-500 px-4 py-3 text-sm font-black text-white active:scale-[0.99] disabled:opacity-60"
+                >
+                  {isUpdating ? "İşleniyor..." : "Onayla"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => onReject(task.taskId)}
+                  disabled={isUpdating}
+                  className="rounded-2xl bg-red-500 px-4 py-3 text-sm font-black text-white active:scale-[0.99] disabled:opacity-60"
+                >
+                  {isUpdating ? "İşleniyor..." : "Reddet"}
+                </button>
+              </div>
+            ) : null}
+
             {task.status === "completed" ? (
               <div className="rounded-2xl bg-amber-500/10 px-4 py-3 text-sm font-black text-amber-600">
                 Görev tamamlandı. Onay bekliyor.
@@ -505,6 +531,8 @@ function TaskList({
   currentUserUid,
   onStart,
   onComplete,
+  onApprove,
+  onReject,
   onPhotoSelected,
   onPreviewPhoto,
   onRemovePhoto,
@@ -517,6 +545,8 @@ function TaskList({
   currentUserUid: string;
   onStart: (taskId: string) => void;
   onComplete: (taskId: string) => void;
+  onApprove: (taskId: string) => void;
+  onReject: (taskId: string) => void;
   onPhotoSelected: (taskId: string, event: ChangeEvent<HTMLInputElement>) => void;
   onPreviewPhoto: (photo: ProofPhotoItem) => void;
   onRemovePhoto: (taskId: string, photo: ProofPhotoItem) => void;
@@ -541,6 +571,8 @@ function TaskList({
           currentUserUid={currentUserUid}
           onStart={onStart}
           onComplete={onComplete}
+          onApprove={onApprove}
+          onReject={onReject}
           onPhotoSelected={onPhotoSelected}
           onPreviewPhoto={onPreviewPhoto}
           onRemovePhoto={onRemovePhoto}
@@ -672,7 +704,9 @@ export function ManagerHomePanel({
 
   const totalTaskCount = visibleTasks.length;
   const openTaskCount = visibleTasks.filter(isOpenTask).length;
-  const pendingApprovalTasks = visibleTasks.filter(isPendingApproval);
+  const pendingApprovalTasks = visibleTasks.filter(
+    (task) => isPendingApproval(task) && task.assignedToUid !== currentUser.uid,
+  );
   const delayedTasks = visibleTasks.filter(isDelayedTask);
   const pendingApprovalCount = pendingApprovalTasks.length;
   const delayedTaskCount = delayedTasks.length;
@@ -724,7 +758,7 @@ export function ManagerHomePanel({
 
   async function handleTaskStatusChange(
     taskId: string,
-    status: "in_progress" | "completed",
+    status: "in_progress" | "completed" | "approved" | "rejected",
   ) {
     try {
       setUpdatingTaskId(taskId);
@@ -739,6 +773,10 @@ export function ManagerHomePanel({
       if (status === "completed") {
         setMessage("Görev tamamlandı. Yönetici/patron onayına gönderildi.");
         setActiveSheet(null);
+      } else if (status === "approved") {
+        setMessage("Görev onaylandı.");
+      } else if (status === "rejected") {
+        setMessage("Görev reddedildi.");
       } else {
         setMessage("Görev başlatıldı.");
       }
@@ -840,10 +878,20 @@ export function ManagerHomePanel({
     void handleTaskStatusChange(taskId, "completed");
   }
 
+  function handleTaskApprove(taskId: string) {
+    void handleTaskStatusChange(taskId, "approved");
+  }
+
+  function handleTaskReject(taskId: string) {
+    void handleTaskStatusChange(taskId, "rejected");
+  }
+
   const taskListProps = {
     currentUserUid: currentUser.uid,
     onStart: handleTaskStart,
     onComplete: handleTaskComplete,
+    onApprove: handleTaskApprove,
+    onReject: handleTaskReject,
     onPhotoSelected: handlePhotoSelected,
     onPreviewPhoto: setSelectedPhoto,
     onRemovePhoto: handleRemovePhoto,
@@ -930,7 +978,12 @@ export function ManagerHomePanel({
       </section>
 
       <ActionSheet title="Görev Ata" isOpen={activeSheet === "assignTask"} onClose={() => setActiveSheet(null)}>
-        <TaskAssignSheet businessId={businessId} onCreated={handleActionCompleted} />
+        <TaskAssignSheet
+          businessId={businessId}
+          assignmentMode="managerTeam"
+          managerUid={currentUser.uid}
+          onCreated={handleActionCompleted}
+        />
       </ActionSheet>
 
       <ActionSheet title="Konum İste" isOpen={activeSheet === "location"} onClose={() => setActiveSheet(null)}>

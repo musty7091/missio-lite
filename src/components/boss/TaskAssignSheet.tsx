@@ -27,6 +27,8 @@ import {
 type TaskAssignSheetProps = {
   businessId: string;
   onCreated: (message: string) => void;
+  assignmentMode?: "all" | "managerTeam";
+  managerUid?: string;
 };
 
 const priorityOptions: TaskPriority[] = ["Normal", "Önemli", "Acil", "Kritik"];
@@ -73,7 +75,12 @@ function FieldCard({
   );
 }
 
-export function TaskAssignSheet({ businessId, onCreated }: TaskAssignSheetProps) {
+export function TaskAssignSheet({
+  businessId,
+  onCreated,
+  assignmentMode = "all",
+  managerUid = "",
+}: TaskAssignSheetProps) {
   const [assignableMembers, setAssignableMembers] = useState<AssignableTaskMember[]>([]);
   const [assignedToUid, setAssignedToUid] = useState("");
   const [taskType, setTaskType] = useState<TaskType>("Rutin");
@@ -100,6 +107,22 @@ export function TaskAssignSheet({ businessId, onCreated }: TaskAssignSheetProps)
   const audioChunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<number | null>(null);
 
+  function filterAssignableMembersForMode(
+    members: AssignableTaskMember[],
+  ): AssignableTaskMember[] {
+    if (assignmentMode !== "managerTeam") {
+      return members;
+    }
+
+    return members.filter((member) => {
+      return (
+        member.role === "staff" &&
+        member.managerUid === managerUid
+      );
+    });
+  }
+
+
   useEffect(() => {
     let isCancelled = false;
 
@@ -111,10 +134,13 @@ export function TaskAssignSheet({ businessId, onCreated }: TaskAssignSheetProps)
         const members = await listAssignableTaskMembers(businessId);
 
         if (!isCancelled) {
-          setAssignableMembers(members);
+          const visibleMembers = filterAssignableMembersForMode(members);
+          setAssignableMembers(visibleMembers);
 
-          if (members.length > 0) {
-            setAssignedToUid((current) => current || members[0].uid);
+          if (visibleMembers.length > 0) {
+            setAssignedToUid((current) => current || visibleMembers[0].uid);
+          } else {
+            setAssignedToUid("");
           }
         }
       } catch (error) {
@@ -137,7 +163,7 @@ export function TaskAssignSheet({ businessId, onCreated }: TaskAssignSheetProps)
     return () => {
       isCancelled = true;
     };
-  }, [businessId]);
+  }, [assignmentMode, businessId, managerUid]);
 
   useEffect(() => {
     return () => {
@@ -357,7 +383,9 @@ export function TaskAssignSheet({ businessId, onCreated }: TaskAssignSheetProps)
               Görev Ata
             </h3>
             <p className="text-xs font-bold leading-5 text-[var(--missio-text-muted)]">
-              {businessId} işletmesindeki aktif yönetici ve personele görev oluştur.
+              {assignmentMode === "managerTeam"
+                ? "Sana bağlı aktif personele görev oluştur."
+                : `${businessId} işletmesindeki aktif yönetici ve personele görev oluştur.`}
             </p>
           </div>
         </div>
@@ -406,8 +434,9 @@ export function TaskAssignSheet({ businessId, onCreated }: TaskAssignSheetProps)
               try {
                 setIsLoadingMembers(true);
                 const members = await listAssignableTaskMembers(businessId);
-                setAssignableMembers(members);
-                setAssignedToUid(members[0]?.uid ?? "");
+                const visibleMembers = filterAssignableMembersForMode(members);
+                setAssignableMembers(visibleMembers);
+                setAssignedToUid(visibleMembers[0]?.uid ?? "");
               } catch (error) {
                 console.error(error);
                 setMessage("Kullanıcı listesi yenilenemedi.");

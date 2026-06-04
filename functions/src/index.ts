@@ -867,6 +867,13 @@ export const updateBusinessTaskStatus = onCall(async (request) => {
     );
   }
 
+  if (["approved", "rejected"].includes(nextStatus) && currentStatus !== "completed") {
+    throw new HttpsError(
+      "failed-precondition",
+      "Sadece tamamlanmış görevler onaylanabilir veya reddedilebilir.",
+    );
+  }
+
   if (callerRole === "staff") {
     if (assignedToUid !== caller.uid) {
       throw new HttpsError("permission-denied", "Personel sadece kendi görevini güncelleyebilir.");
@@ -895,6 +902,20 @@ export const updateBusinessTaskStatus = onCall(async (request) => {
       throw new HttpsError(
         "permission-denied",
         "Yönetici sadece kendi görevlerini veya kendi personelinin görevlerini güncelleyebilir.",
+      );
+    }
+
+    if (["approved", "rejected"].includes(nextStatus) && isOwnTask) {
+      throw new HttpsError(
+        "permission-denied",
+        "Yönetici kendi görevini kendisi onaylayamaz veya reddedemez.",
+      );
+    }
+
+    if (["approved", "rejected"].includes(nextStatus) && !isOwnStaffTask) {
+      throw new HttpsError(
+        "permission-denied",
+        "Yönetici sadece kendisine bağlı personelin görevini onaylayabilir veya reddedebilir.",
       );
     }
   }
